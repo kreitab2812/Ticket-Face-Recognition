@@ -42,12 +42,13 @@ jobs:
           cd backend
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install "numpy<2" "opencv-python<4.11" "tensorflow==2.15.0" "httpx<0.28.0" pytest
+          pip install "numpy<2" "opencv-python<4.11" "tensorflow==2.16.1" "tf-keras==2.16.0" "httpx<0.28.0" pytest
           
       - name: Run Pytest
         env:
-          # Truy truyen bien moi truong cho Pytest de ket noi vao DB ao vua tao
           DATABASE_URL: "postgresql://admin:adminpassword@localhost:5432/event_checkin"
+          # Them chia khoa nay de ep DeepFace dung Keras 2
+          TF_USE_LEGACY_KERAS: "1"
         run: |
           cd backend
           python -m pytest tests/
