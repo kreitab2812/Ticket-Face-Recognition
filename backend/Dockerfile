@@ -1,21 +1,20 @@
 FROM python:3.10-slim
 
-# Thiết lập thư mục làm việc mặc định bên trong Container
 WORKDIR /code
 
-# Cài đặt các thư viện hệ thống lõi cho thuật toán Computer Vision (OpenCV, DeepFace)
+# Cài đặt các thư viện hệ thống và trình biên dịch C++ (gcc, g++)
 RUN apt-get update && apt-get install -y \
     libgl1 \
     libglib2.0-0 \
     libgomp1 \
+    gcc \
+    g++ \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Cài đặt thư viện Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Sao chép toàn bộ mã nguồn (thư mục app và worker) vào /code
 COPY . .
 
-# Khai báo đường dẫn để Python nhận diện được các module nội bộ
 ENV PYTHONPATH=/code

@@ -1,71 +1,81 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import { ShieldCheck, ShieldAlert, ScanFace } from 'lucide-react';
-import axios from 'axios';
 
 export default function App() {
   const webcamRef = useRef(null);
+  const wsRef = useRef(null);
+  
   const [status, setStatus] = useState('idle'); // 'idle', 'success', 'error'
-  const [message, setMessage] = useState('Đang chờ quét khuôn mặt...');
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [message, setMessage] = useState('Đang kết nối tới hệ thống an ninh...');
 
-  const captureAndSend = useCallback(async () => {
-    if (isProcessing || status !== 'idle') return;
-
-    const imageSrc = webcamRef.current?.getScreenshot();
-    if (!imageSrc) return;
-
-    // Chuyển base64 thành Blob (File) để gửi đi
-    const res = await fetch(imageSrc);
-    const blob = await res.blob();
+  // 1. Khởi tạo đường ống WebSocket ngay khi mở web
+  useEffect(() => {
+    // Tự động nhận diện domain đang chạy (localhost:4000)
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/api/ws/scan`;
     
-    const formData = new FormData();
-    formData.append('file_rgb', blob, 'capture.jpg');
+    wsRef.current = new WebSocket(wsUrl);
 
-    try {
-      setIsProcessing(true);
+    wsRef.current.onopen = () => {
+      console.log('✅ Đã thông đường ống WebSocket!');
+      setMessage('Đang chờ quét khuôn mặt...');
+    };
+
+    // 2. Lắng nghe Backend trả kết quả Đỏ/Xanh qua ống nước
+    wsRef.current.onmessage = (event) => {
+      const data = JSON.parse(event.data);
       
-      const response = await axios.post('/api/check-in', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-
-      const data = response.data;
-
-      if (data.status === 'success' && data.access === 'granted') {
+      if (data.status === 'success') {
         setStatus('success');
         setMessage(`✅ ${data.message}`);
-      } else if (data.status === 'success' && data.access === 'denied') {
+        resetAfterDelay();
+      } else if (data.status === 'error' && data.access === 'denied') {
         setStatus('error');
         setMessage(`🚨 ${data.message}`);
-      } else if (data.status === 'denied') {
+        resetAfterDelay();
+      } else if (data.status === 'error') {
         setStatus('error');
         setMessage(`❌ ${data.message}`);
-      } else {
-        // Lỗi vặt (không thấy mặt), bỏ qua để quét tiếp
-        setIsProcessing(false);
-        return;
+        resetAfterDelay();
       }
+      // Nếu data.status === 'idle' (không thấy mặt), web tự hiểu là im lặng quét tiếp
+    };
 
-      // Giữ thông báo 3 giây rồi reset
-      setTimeout(() => {
-        setStatus('idle');
-        setMessage('Đang chờ quét khuôn mặt...');
-        setIsProcessing(false);
-      }, 3000);
+    wsRef.current.onclose = () => {
+      setMessage('Mất kết nối tới máy chủ. Vui lòng tải lại trang.');
+      setStatus('error');
+    };
 
-    } catch (error) {
-      console.error("Lỗi API:", error);
-      setIsProcessing(false);
-    }
-  }, [isProcessing, status]);
+    return () => {
+      if (wsRef.current) wsRef.current.close();
+    };
+  }, []);
 
-  // Vòng lặp quét tự động mỗi 2 giây
+  const resetAfterDelay = () => {
+    setTimeout(() => {
+      setStatus('idle');
+      setMessage('Đang chờ quét khuôn mặt...');
+    }, 3000);
+  };
+
+  // 3. Vòng lặp bơm ảnh vào ống nước (Mỗi 1 giây)
   useEffect(() => {
-    const interval = setInterval(captureAndSend, 2000);
-    return () => clearInterval(interval);
-  }, [captureAndSend]);
+    const interval = setInterval(() => {
+      // Chỉ gửi ảnh khi WebSocket đã mở VÀ hệ thống đang rảnh (idle)
+      if (status === 'idle' && wsRef.current?.readyState === WebSocket.OPEN) {
+        const imageSrc = webcamRef.current?.getScreenshot();
+        if (imageSrc) {
+          // Bơm thẳng Base64 qua WebSocket, không cần FormData
+          wsRef.current.send(imageSrc); 
+        }
+      }
+    }, 1000); 
 
-  // Xử lý giao diện dựa trên trạng thái (status)
+    return () => clearInterval(interval);
+  }, [status]);
+
+  // UI Render (Giữ nguyên giao diện Cyberpunk)
   let borderColor = 'border-blue-500';
   let bgColor = 'bg-slate-900';
   let Icon = ScanFace;
@@ -85,13 +95,11 @@ export default function App() {
 
   return (
     <div className={`min-h-screen flex flex-col items-center justify-center transition-colors duration-500 ${bgColor}`}>
-      
       <div className="text-center mb-8 z-10">
         <h1 className="text-4xl font-bold text-white tracking-wider mb-2">HỆ THỐNG KIỂM SOÁT AN NINH</h1>
         <p className="text-slate-400">Vui lòng nhìn thẳng vào camera để xác thực vé</p>
       </div>
 
-      {/* Khung Camera */}
       <div className={`relative rounded-2xl overflow-hidden border-4 transition-all duration-300 ${borderColor}`}>
         <Webcam
           ref={webcamRef}
@@ -99,25 +107,16 @@ export default function App() {
           screenshotFormat="image/jpeg"
           videoConstraints={{ facingMode: "user" }}
           className="w-[800px] h-[600px] object-cover mirrored"
-          style={{ transform: 'scaleX(-1)' }} // Lật camera như gương
+          style={{ transform: 'scaleX(-1)' }}
         />
-        
-        {/* Lớp mờ Bounding Box */}
         <div className="absolute inset-0 pointer-events-none border-[100px] border-black/40">
            <div className={`w-full h-full border-2 border-dashed ${iconColor} opacity-50`}></div>
         </div>
       </div>
 
-      {/* Bảng thông báo */}
       <div className="mt-8 flex items-center gap-4 bg-slate-800/80 px-8 py-4 rounded-xl border border-slate-700 backdrop-blur-sm">
         <Icon className={`w-8 h-8 ${iconColor}`} />
         <span className={`text-xl font-semibold text-white`}>{message}</span>
-      </div>
-
-      <div className="absolute top-4 right-4">
-        <a href="/admin.html" className="text-slate-400 hover:text-white text-sm underline">
-          Quản trị hệ thống
-        </a>
       </div>
     </div>
   );
