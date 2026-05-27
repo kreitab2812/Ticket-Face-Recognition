@@ -1,0 +1,45 @@
+name: Frontend CI
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'frontend-admin/**'
+      - 'frontend-kiosk/**'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'frontend-admin/**'
+      - 'frontend-kiosk/**'
+
+jobs:
+  build-frontends:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [frontend-admin, frontend-kiosk]
+
+    defaults:
+      run:
+        working-directory: ./${{ matrix.app }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js 18.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18.x
+        cache: 'npm'
+        cache-dependency-path: ./${{ matrix.app }}/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run ESLint
+      run: |
+        # Kiem tra xem du an co cai eslint khong roi moi chay
+        if grep -q "eslint" package.json; then npm run lint; else echo "Khong tim thay script lint"; fi
+
+    - name: Build project
+      run: npm run build
