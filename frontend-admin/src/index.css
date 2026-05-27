@@ -1,7 +1,9 @@
-@import "tailwindcss";
+/* Tich hop Tailwind CSS vao du an */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-body {
-  background-color: #f1f5f9; /* Màu nền xám nhạt (Slate 100) */
-  margin: 0;
-  font-family: system-ui, -apple-system, sans-serif;
+/* Them CSS tuy chinh rieng cho camera (Neu can) */
+.mirrored {
+  transform: scaleX(-1);
 }

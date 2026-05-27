@@ -10,6 +10,7 @@ from app.core.config import settings
 
 qdrant = QdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
 
+# Khoi tao collection neu chua co
 try:
     qdrant.get_collection("faces_arcface")
 except:
@@ -24,8 +25,9 @@ def process_message(ch, method, properties, body):
     attendee_name = data['name']
     ticket_code = data['ticket_code']
 
-    print(f"[*] Bắt đầu trích xuất đặc trưng sinh trắc học cho vé: {ticket_code}")
+    print(f"[*] Bat dau trich xuat dac trung sinh trac hoc cho ve: {ticket_code}")
     try:
+        # Su dung RetinaFace de cat mat va ArcFace de lay vector 512 chieu
         embedding_objs = DeepFace.represent(
             img_path=image_path, 
             model_name="ArcFace", 
@@ -34,6 +36,7 @@ def process_message(ch, method, properties, body):
         )
         embedding = embedding_objs[0]["embedding"]
 
+        # Luu vector vao Qdrant kem theo payload la thong tin khach hang
         qdrant.upsert(
             collection_name="faces_arcface",
             points=[
@@ -47,17 +50,19 @@ def process_message(ch, method, properties, body):
                 )
             ]
         )
-        print(f"[+] Hoàn tất lưu trữ vector cho khách hàng: {attendee_name}.")
+        print(f"[+] Hoan tat luu tru vector cho khach hang: {attendee_name}.")
         
-        # Xóa tệp tạm để tối ưu không gian lưu trữ
+        # Xoa tep tam de toi uu khong gian luu tru sau khi nhan dien xong
         if os.path.exists(image_path):
             os.remove(image_path)
             
     except Exception as e:
-        print(f"[-] Lỗi phân tích hình ảnh đối với vé {ticket_code}: {e}")
+        print(f"[-] Loi phan tich hinh anh doi voi ve {ticket_code}: {e}")
 
+    # Xac nhan voi RabbitMQ la da xu ly xong message
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
+# Thiet lap ket noi RabbitMQ
 credentials = pika.PlainCredentials(settings.MQ_USER, settings.MQ_PASSWORD)
 connection = pika.BlockingConnection(
     pika.ConnectionParameters(host=settings.MQ_HOST, credentials=credentials)
@@ -67,5 +72,5 @@ channel = connection.channel()
 channel.queue_declare(queue='ticket_processing')
 channel.basic_consume(queue='ticket_processing', on_message_callback=process_message)
 
-print('[*] Trình xử lý ngầm (Worker) đang chờ nhận tín hiệu từ RabbitMQ...')
+print('[*] Trinh xu ly ngam (Worker) dang cho nhan tin hieu tu RabbitMQ...')
 channel.start_consuming()

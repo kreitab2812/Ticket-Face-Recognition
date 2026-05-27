@@ -10,10 +10,11 @@ class Attendee(Base):
     name = Column(String, nullable=False, index=True)
     ticket_code = Column(String, unique=True, nullable=False, index=True)
     
-    # Biến trạng thái phục vụ logic kiểm soát vé chợ đen
+    # Bien trang thai phuc vu logic kiem soat ve cho den
     is_checked_in = Column(Boolean, default=False) 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
+    # Quan he 1-N voi bang CheckInLog
     logs = relationship("CheckInLog", back_populates="attendee", cascade="all, delete-orphan")
 
 
@@ -21,6 +22,7 @@ class CheckInLog(Base):
     __tablename__ = "checkin_logs"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    # Khoa ngoai lien ket voi bang attendees, ondelete CASCADE giup tu xoa log neu xoa khach hang
     attendee_id = Column(Integer, ForeignKey("attendees.id", ondelete="CASCADE"), nullable=False)
     check_time = Column(DateTime, default=datetime.datetime.utcnow)
     

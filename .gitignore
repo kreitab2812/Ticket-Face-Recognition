@@ -1,23 +1,37 @@
-# Data cua cac Container (Tuyet doi khong push len Github)
-pg_data/
-minio_data/
-qdrant_data/
-backend/temp_images/
-
-# File bao mat
+# ========================
+# BO QUA FILE MOI TRUONG
+# ========================
 .env
+.env.*
 
-# Python va he dieu hanh
+# ========================
+# BO QUA THU MUC NODE/PYTHON
+# ========================
+node_modules/
 __pycache__/
-*.py[cod]
-*$py.class
-.venv/
+*.pyc
+.pytest_cache/
 venv/
+env/
+
+# ========================
+# BO QUA DOCKER VOLUMES (QUAN TRONG)
+# ========================
+# Khong duoc day Database va anh khach hang len Git
+pg_data/
+qdrant_data/
+minio_data/
+backend/temp_images/
+temp_images/
+
+# ========================
+# BO QUA FILE BUILD CUA REACT
+# ========================
+frontend-kiosk/dist/
+frontend-admin/dist/
+
+# ========================
+# BO QUA FILE HE THONG
+# ========================
 .DS_Store
 Thumbs.db
-
-# Anh va video rac luc test
-*.jpg
-*.jpeg
-*.png
-*.mp4

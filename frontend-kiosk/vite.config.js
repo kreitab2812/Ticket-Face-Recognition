@@ -1,19 +1,18 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
 
+// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [
-    react(),
-    tailwindcss(),
-  ],
+  plugins: [react()],
   server: {
-    port: 3000,
+    port: 3000, // Thay bang 3001 cho Kiosk neu chay cung luc tren may tinh
+    host: true,
     proxy: {
+      // Tu dong chuyen huong call API ve backend khi test local
       '/api': {
-        target: 'http://localhost:8000', 
+        target: 'http://localhost:8000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        ws: true // Ho tro WebSocket cho Kiosk
       }
     }
   }
