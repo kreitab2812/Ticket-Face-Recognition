@@ -2,6 +2,7 @@ import pika
 import json
 import uuid
 import os
+import time
 from deepface import DeepFace
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams, PointStruct
@@ -10,20 +11,23 @@ from app.core.config import settings
 
 qdrant = QdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
 
+# FIX BUG NGHIEM TRONG: Doi ten collection thanh "attendees" de khop voi router_kiosk.py
+COLLECTION_NAME = "attendees"
+
 # Khoi tao collection neu chua co
 try:
-    qdrant.get_collection("faces_arcface")
+    qdrant.get_collection(COLLECTION_NAME)
 except:
     qdrant.create_collection(
-        collection_name="faces_arcface",
+        collection_name=COLLECTION_NAME,
         vectors_config=VectorParams(size=512, distance=Distance.COSINE) 
     )
 
 def process_message(ch, method, properties, body):
     data = json.loads(body)
-    image_path = data['image_path']
-    attendee_name = data['name']
-    ticket_code = data['ticket_code']
+    image_path = data.get('image_path')
+    attendee_name = data.get('name')
+    ticket_code = data.get('ticket_code')
 
     print(f"[*] Bat dau trich xuat dac trung sinh trac hoc cho ve: {ticket_code}")
     try:
@@ -38,7 +42,7 @@ def process_message(ch, method, properties, body):
 
         # Luu vector vao Qdrant kem theo payload la thong tin khach hang
         qdrant.upsert(
-            collection_name="faces_arcface",
+            collection_name=COLLECTION_NAME,
             points=[
                 PointStruct(
                     id=str(uuid.uuid4()),
@@ -52,25 +56,47 @@ def process_message(ch, method, properties, body):
         )
         print(f"[+] Hoan tat luu tru vector cho khach hang: {attendee_name}.")
         
-        # Xoa tep tam de toi uu khong gian luu tru sau khi nhan dien xong
-        if os.path.exists(image_path):
-            os.remove(image_path)
-            
+        # Chi ACK (xac nhan thanh cong) khi moi viec troi chay hoan hao
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+        
+    except ValueError:
+        # Loi Deepface khong tim thay khuon mat -> Loi tu phia du lieu dau vao (anh loi)
+        # Tinh huong nay co retries cung khong duoc, nen ACK de xoa khoi queue luon
+        print(f"[-] Canh bao: Khong tim thay khuon mat trong ho so ve {ticket_code}.")
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+        
     except Exception as e:
-        print(f"[-] Loi phan tich hinh anh doi voi ve {ticket_code}: {e}")
+        # Loi he thong (Qdrant sap, MinIO loi...) -> NACK de RabbitMQ dua lai vao queue doi xu ly sau
+        print(f"[-] Loi he thong khi xu ly ve {ticket_code}: {e}")
+        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+        
+    finally:
+        # Biet doi don dep: Luon luon xoa file temp du cho code chay dung hay bao loi
+        if image_path and os.path.exists(image_path):
+            os.remove(image_path)
 
-    # Xac nhan voi RabbitMQ la da xu ly xong message
-    ch.basic_ack(delivery_tag=method.delivery_tag)
+def main():
+    # Co che Auto-Reconnect: Lap lai viec ket noi neu RabbitMQ chua san sang
+    while True:
+        try:
+            credentials = pika.PlainCredentials(settings.MQ_USER, settings.MQ_PASSWORD)
+            connection = pika.BlockingConnection(
+                pika.ConnectionParameters(host=settings.MQ_HOST, credentials=credentials)
+            )
+            channel = connection.channel()
 
-# Thiet lap ket noi RabbitMQ
-credentials = pika.PlainCredentials(settings.MQ_USER, settings.MQ_PASSWORD)
-connection = pika.BlockingConnection(
-    pika.ConnectionParameters(host=settings.MQ_HOST, credentials=credentials)
-)
-channel = connection.channel()
+            channel.queue_declare(queue='ticket_processing')
+            
+            # Toi uu RAM: Chi cho phep worker nhan xu ly 1 anh moi lan, xong moi nhan tiep
+            channel.basic_qos(prefetch_count=1)
+            channel.basic_consume(queue='ticket_processing', on_message_callback=process_message)
 
-channel.queue_declare(queue='ticket_processing')
-channel.basic_consume(queue='ticket_processing', on_message_callback=process_message)
+            print('[*] Trinh xu ly ngam (AI Worker) da san sang nhan tac vu...')
+            channel.start_consuming()
+            
+        except pika.exceptions.AMQPConnectionError:
+            print("[-] Mat ket noi voi RabbitMQ. Dang thu lai sau 5 giay...")
+            time.sleep(5)
 
-print('[*] Trinh xu ly ngam (Worker) dang cho nhan tin hieu tu RabbitMQ...')
-channel.start_consuming()
+if __name__ == "__main__":
+    main()

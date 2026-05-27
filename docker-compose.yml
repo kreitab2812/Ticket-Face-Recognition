@@ -6,13 +6,18 @@ services:
     image: postgres:15
     container_name: postgres_db
     environment:
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=adminpassword
-      - POSTGRES_DB=event_checkin
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
     ports:
       - "5432:5432"
     volumes:
       - ./pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   qdrant:
@@ -28,8 +33,8 @@ services:
     image: minio/minio:latest
     container_name: minio_storage
     environment:
-      - MINIO_ROOT_USER=admin
-      - MINIO_ROOT_PASSWORD=adminpassword
+      - MINIO_ROOT_USER=${MINIO_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_PASSWORD}
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -42,14 +47,18 @@ services:
     image: rabbitmq:3-management
     container_name: rabbitmq_broker
     environment:
-      - RABBITMQ_DEFAULT_USER=admin
-      - RABBITMQ_DEFAULT_PASS=adminpassword
+      - RABBITMQ_DEFAULT_USER=${MQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${MQ_PASSWORD}
     ports:
       - "5672:5672"
       - "15672:15672"
       - "15692:15692" # Cong nay dung de xuat metric cho Prometheus
-    # Ep RabbitMQ bat plugin prometheus truoc khi chay server
     command: bash -c "rabbitmq-plugins enable rabbitmq_prometheus; rabbitmq-server"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   # ==========================================
@@ -64,13 +73,17 @@ services:
       - "8000:8000"
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     depends_on:
-      - postgres
-      - qdrant
-      - rabbitmq
-      - minio
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      minio:
+        condition: service_started
     volumes:
       - ./backend/temp_images:/code/temp_images
-      - ~/.deepface:/root/.deepface
+      - deepface_models:/root/.deepface # Su dung Named Volume thay cho duong dan tuyet doi
     restart: unless-stopped
 
   ai_worker:
@@ -80,11 +93,21 @@ services:
       - .env
     command: python -m task_embedding
     depends_on:
-      - qdrant
-      - rabbitmq
+      rabbitmq:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
     volumes:
       - ./backend/temp_images:/code/temp_images
-      - ~/.deepface:/root/.deepface
+      - deepface_models:/root/.deepface # Dong bo cung Volume voi backend
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'         # Gioi han toi da 2 CPU cores
+          memory: 4G          # Gioi han RAM khong vuot qua 4GB tranh crash server
+        reservations:
+          cpus: '1.0'
+          memory: 2G
     restart: unless-stopped
     
   cleanup_worker:
@@ -125,7 +148,7 @@ services:
       - frontend_admin
     restart: unless-stopped
     
-    # ==========================================
+  # ==========================================
   # 5. HE THONG GIAM SAT (MONITORING)
   # ==========================================
   prometheus:
@@ -142,8 +165,8 @@ services:
     image: grafana/grafana:latest
     container_name: grafana
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=adminpassword
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-adminpassword}
     ports:
       - "3000:3000"
     depends_on:
@@ -165,3 +188,7 @@ services:
     ports:
       - "8080:8080"
     restart: unless-stopped
+
+# Khai bao cac Named Volumes duoc quan ly boi Docker
+volumes:
+  deepface_models:

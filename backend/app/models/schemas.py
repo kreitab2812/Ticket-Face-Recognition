@@ -1,32 +1,52 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
-from sqlalchemy.orm import relationship
-import datetime
-from datetime import timezone
-from app.models.database import Base
+from pydantic import BaseModel, ConfigDict
+from datetime import datetime
+from typing import Optional, List
 
-class Attendee(Base):
-    __tablename__ = "attendees"
+# ==========================================
+# 1. SCHEMAS CHO LOG CHECK-IN
+# ==========================================
 
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    name = Column(String, nullable=False, index=True)
-    ticket_code = Column(String, unique=True, nullable=False, index=True)
+class CheckInLogBase(BaseModel):
+    status: str
+    image_url: Optional[str] = None
+
+class CheckInLogCreate(CheckInLogBase):
+    attendee_id: int
+
+class CheckInLogResponse(CheckInLogBase):
+    id: int
+    attendee_id: int
+    check_time: datetime
+
+    # Cau hinh de Pydantic tuong thich va doc duoc du lieu tu SQLAlchemy ORM
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ==========================================
+# 2. SCHEMAS CHO NGUOI THAM GIA (ATTENDEE)
+# ==========================================
+
+class AttendeeBase(BaseModel):
+    name: str
+    ticket_code: str
+
+class AttendeeCreate(AttendeeBase):
+    # Dung khi client tao moi ticket nguoi dung
+    pass
+
+class AttendeeUpdate(BaseModel):
+    # Dung khi can cap nhat trang thai hoac thong tin
+    name: Optional[str] = None
+    is_checked_in: Optional[bool] = None
+
+class AttendeeResponse(AttendeeBase):
+    id: int
+    is_checked_in: bool
+    created_at: datetime
     
-    is_checked_in = Column(Boolean, default=False) 
-    # Fix
-    created_at = Column(DateTime, default=lambda: datetime.datetime.now(timezone.utc))
+    # Cau hinh de tu dong map tu SQLAlchemy model sang JSON
+    model_config = ConfigDict(from_attributes=True)
 
-    logs = relationship("CheckInLog", back_populates="attendee", cascade="all, delete-orphan")
-
-
-class CheckInLog(Base):
-    __tablename__ = "checkin_logs"
-
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    attendee_id = Column(Integer, ForeignKey("attendees.id", ondelete="CASCADE"), nullable=False)
-    # Fix
-    check_time = Column(DateTime, default=lambda: datetime.datetime.now(timezone.utc))
-    
-    status = Column(String, nullable=False) 
-    image_url = Column(String, nullable=True) 
-
-    attendee = relationship("Attendee", back_populates="logs")
+class AttendeeDetailResponse(AttendeeResponse):
+    # Tra ve thong tin chi tiet kem theo lich su cac lan quet checkin
+    logs: List[CheckInLogResponse] = []

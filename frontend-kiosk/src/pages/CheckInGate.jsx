@@ -1,69 +1,139 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import Webcam from 'react-webcam';
+import { ShieldCheck, ShieldAlert, ScanFace, Loader2 } from 'lucide-react';
 
 const CheckInGate = () => {
-    const webcamRef = useRef(null);
-    const wsRef = useRef(null);
-    const [statusData, setStatusData] = useState({ status: 'idle', message: 'Dang cho quet khuon mat...' });
+  const webcamRef = useRef(null);
+  const wsRef = useRef(null);
+  const isProcessingRef = useRef(false); 
+  
+  const [status, setStatus] = useState('idle'); 
+  const [message, setMessage] = useState('Dang ket noi toi he thong an ninh...');
 
-    // Ket noi WebSocket toi Backend
-    useEffect(() => {
-        // Luu y: Chinh lai IP neu chay tren mang LAN
-        wsRef.current = new WebSocket('ws://localhost:4000/api/ws/scan');
-        
-        wsRef.current.onopen = () => console.log('[+] Ket noi WebSocket thanh cong');
-        
-        wsRef.current.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            setStatusData(data); // Cap nhat giao dien (Xanh/Do)
-        };
+  const connectWebSocket = useCallback(() => {
+    setStatus('connecting');
+    setMessage('Dang thiet lap duong truyen...');
 
-        return () => {
-            if (wsRef.current) wsRef.current.close();
-        };
-    }, []);
+    // Tu dong lay IP host cua mang hien tai, khong fix cung localhost
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/api/ws/scan`;
+    
+    wsRef.current = new WebSocket(wsUrl);
 
-    // Ham chup anh va gui di moi 1 giay (tranh lam qua tai server)
-    const captureAndSend = useCallback(() => {
-        if (webcamRef.current && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            const imageSrc = webcamRef.current.getScreenshot();
-            if (imageSrc) {
-                wsRef.current.send(imageSrc);
-            }
+    wsRef.current.onopen = () => {
+      console.log('✅ Da thong duong ong WebSocket!');
+      setStatus('idle');
+      setMessage('Dang cho quet khuon mat...');
+    };
+
+    wsRef.current.onmessage = (event) => {
+      isProcessingRef.current = false; // Mo khoa cho phep gui anh tiep theo
+      const data = JSON.parse(event.data);
+      
+      if (data.status === 'success') {
+        setStatus('success');
+        setMessage(`✅ ${data.message}`);
+        resetAfterDelay();
+      } else if (data.status === 'error' && data.access === 'denied') {
+        setStatus('error');
+        setMessage(`🚨 ${data.message}`);
+        resetAfterDelay();
+      } else if (data.status === 'idle') {
+        setStatus('idle');
+        setMessage('Dang cho quet khuon mat...');
+      }
+    };
+
+    wsRef.current.onclose = () => {
+      setStatus('connecting');
+      setMessage('Mat ket noi den May chu. Dang thu lai...');
+      setTimeout(connectWebSocket, 3000); // Tu dong thu ket noi lai sau 3 giay
+    };
+
+    wsRef.current.onerror = (error) => {
+      console.error('[-] Loi WebSocket:', error);
+      wsRef.current.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    connectWebSocket();
+    return () => {
+      if (wsRef.current) wsRef.current.close();
+    };
+  }, [connectWebSocket]);
+
+  useEffect(() => {
+    const captureInterval = setInterval(() => {
+      // Co che chong spam: Chi gui anh khi ong nuoc mo VA khong co anh nao dang xu ly
+      if (wsRef.current?.readyState === WebSocket.OPEN && !isProcessingRef.current && status === 'idle') {
+        const imageSrc = webcamRef.current?.getScreenshot();
+        if (imageSrc) {
+          isProcessingRef.current = true; // Khoa trang thai
+          wsRef.current.send(imageSrc);
         }
-    }, [webcamRef]);
+      }
+    }, 1500); 
 
-    useEffect(() => {
-        const interval = setInterval(captureAndSend, 1000);
-        return () => clearInterval(interval);
-    }, [captureAndSend]);
+    return () => clearInterval(captureInterval);
+  }, [status]);
 
-    return (
-        <div style={{ textAlign: 'center', fontFamily: 'sans-serif' }}>
-            <h1>KIOSK CHECK-IN SU KIEN</h1>
-            <div style={{ position: 'relative', display: 'inline-block' }}>
-                <Webcam
-                    audio={false}
-                    ref={webcamRef}
-                    screenshotFormat="image/jpeg"
-                    videoConstraints={{ facingMode: "user" }}
-                    style={{ border: '5px solid #333', borderRadius: '10px' }}
-                />
-            </div>
-            
-            {/* Hien thi trang thai (Xanh = Hop le, Do = Ve cho den/Loi) */}
-            <div style={{ 
-                marginTop: '20px', 
-                padding: '20px', 
-                fontSize: '24px', 
-                fontWeight: 'bold',
-                color: 'white',
-                backgroundColor: statusData.status === 'success' ? 'green' : (statusData.status === 'error' ? 'red' : 'gray') 
-            }}>
-                {statusData.message}
-            </div>
+  const resetAfterDelay = () => {
+    setTimeout(() => {
+      setStatus('idle');
+      setMessage('Dang cho quet khuon mat...');
+    }, 3000);
+  };
+
+  // UI Setup bang Tailwind CSS
+  let borderColor = 'border-blue-500';
+  let bgColor = 'bg-slate-900';
+  let Icon = ScanFace;
+  let iconColor = 'text-blue-400';
+
+  if (status === 'success') {
+    borderColor = 'border-green-500 shadow-[0_0_50px_rgba(34,197,94,0.5)]';
+    bgColor = 'bg-green-950';
+    Icon = ShieldCheck;
+    iconColor = 'text-green-500';
+  } else if (status === 'error') {
+    borderColor = 'border-red-600 shadow-[0_0_50px_rgba(220,38,38,0.7)]';
+    bgColor = 'bg-red-950';
+    Icon = ShieldAlert;
+    iconColor = 'text-red-500';
+  } else if (status === 'connecting') {
+    borderColor = 'border-orange-500';
+    Icon = Loader2;
+    iconColor = 'text-orange-500 animate-spin';
+  }
+
+  return (
+    <div className={`min-h-screen flex flex-col items-center justify-center transition-colors duration-500 ${bgColor}`}>
+      <div className="text-center mb-8 z-10">
+        <h1 className="text-4xl font-bold text-white tracking-wider mb-2">KIOSK CHECK-IN SU KIEN</h1>
+        <p className="text-slate-400">Vui long nhin thang vao camera de xac thuc</p>
+      </div>
+
+      <div className={`relative rounded-2xl overflow-hidden border-4 transition-all duration-300 ${borderColor}`}>
+        <Webcam
+          ref={webcamRef}
+          audio={false}
+          screenshotFormat="image/jpeg"
+          videoConstraints={{ facingMode: "user" }}
+          className="w-[800px] h-[600px] object-cover mirrored"
+          style={{ transform: 'scaleX(-1)' }} 
+        />
+        <div className="absolute inset-0 pointer-events-none border-[100px] border-black/40">
+           <div className={`w-full h-full border-2 border-dashed ${iconColor} opacity-50`}></div>
         </div>
-    );
+      </div>
+
+      <div className="mt-8 bg-slate-800/80 backdrop-blur px-8 py-4 rounded-full flex items-center gap-4 border border-slate-700">
+        <Icon className={`w-8 h-8 ${iconColor}`} />
+        <span className="text-xl font-medium text-white">{message}</span>
+      </div>
+    </div>
+  );
 };
 
 export default CheckInGate;

@@ -3,7 +3,7 @@
 
 if [ -z "$1" ]; then
   echo "[-] Loi: Chua truyen file backup!"
-  echo "[-] Cach dung: ./restore_db.sh ./backups/db_backup_20260528_120000.sql"
+  echo "[-] Cach dung: ./scripts/restore_db.sh ./backups/db_backup_20260528_120000.sql"
   exit 1
 fi
 
@@ -14,7 +14,16 @@ if [ ! -f "$FILE_PATH" ]; then
     exit 1
 fi
 
+# Tu dong nap bien moi truong tu file .env
+if [ -f .env ]; then
+    export $(cat .env | grep -v '#' | awk '/=/ {print $1}')
+else
+    echo "[-] Khong tim thay file .env. Vui long chay script tu thu muc goc cua du an."
+    exit 1
+fi
+
 echo "[*] Dang phuc hoi co so du lieu tu file $FILE_PATH..."
-cat "$FILE_PATH" | docker exec -i postgres_db psql -U admin -d event_checkin
+# Dung cat de day noi dung file vao psql qua duong ong
+cat "$FILE_PATH" | docker exec -e PGPASSWORD=${DB_PASSWORD} -i postgres_db psql -U ${DB_USER} -d ${DB_NAME}
 
 echo "[+] Phuc hoi thanh cong!"

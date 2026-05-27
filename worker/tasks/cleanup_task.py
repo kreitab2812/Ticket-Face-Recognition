@@ -3,11 +3,16 @@ import time
 import glob
 from datetime import datetime, timedelta
 
-TEMP_DIR = "/code/temp_images"
+# Fix: Su dung duong dan tuong doi hoac lay tu bien moi truong, khong hardcode "/code"
+TEMP_DIR = os.getenv("TEMP_IMAGES_DIR", "temp_images")
+
+# Dam bao thu muc ton tai truoc khi giam sat de tranh bi loi
+os.makedirs(TEMP_DIR, exist_ok=True)
+
 # Chi xoa nhung file rac da ton tai qua 1 gio
 AGE_LIMIT = timedelta(hours=1)
 
-print("[*] Cleanup Worker da khoi dong. Dang giam sat thu muc tam...")
+print(f"[*] Cleanup Worker da khoi dong. Dang giam sat thu muc: {TEMP_DIR}")
 
 while True:
     try:
