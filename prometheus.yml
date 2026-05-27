@@ -1,0 +1,19 @@
+# prometheus/prometheus.yml
+global:
+  scrape_interval: 15s # Cu 15 giay Prometheus se di thu thap du lieu 1 lan
+
+scrape_configs:
+  # 1. Theo doi API Backend (Latency, So luong request)
+  - job_name: 'fastapi_backend'
+    static_configs:
+      - targets: ['backend_api:8000']
+
+  # 2. Theo doi RabbitMQ (So luong message bi ket)
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['rabbitmq_broker:15692']
+
+  # 3. Theo doi Tai nguyen Container (RAM, CPU cua AI Worker)
+  - job_name: 'docker_containers'
+    static_configs:
+      - targets: ['cadvisor:8080']

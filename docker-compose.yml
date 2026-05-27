@@ -47,6 +47,9 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
+      - "15692:15692" # Cong nay dung de xuat metric cho Prometheus
+    # Ep RabbitMQ bat plugin prometheus truoc khi chay server
+    command: bash -c "rabbitmq-plugins enable rabbitmq_prometheus; rabbitmq-server"
     restart: unless-stopped
 
   # ==========================================
@@ -71,11 +74,11 @@ services:
     restart: unless-stopped
 
   ai_worker:
-    build: ./backend
+    build: ./worker
     container_name: ai_worker
     env_file: 
       - .env
-    command: python -m worker.task_embedding
+    command: python -m task_embedding
     depends_on:
       - qdrant
       - rabbitmq
@@ -120,4 +123,45 @@ services:
       - backend_api
       - frontend_kiosk
       - frontend_admin
+    restart: unless-stopped
+    
+    # ==========================================
+  # 5. HE THONG GIAM SAT (MONITORING)
+  # ==========================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=adminpassword
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.0
+    container_name: cadvisor
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8080:8080"
     restart: unless-stopped

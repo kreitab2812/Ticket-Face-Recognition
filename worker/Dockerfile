@@ -1,20 +1,16 @@
-# Su dung anh Python mong nhe de tiet kiem dung luong
-FROM python:3.10-slim
+# worker/Dockerfile
+FROM python:3.12-slim
 
-WORKDIR /code
+WORKDIR /app
 
-# Cai dat cac thu vien he thong can thiet cho viec xu ly anh cua OpenCV
-RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y libgl1 libglib2.0-0 && rm -rf /var/lib/apt/lists/*
 
-# Cai dat thu vien Python
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir "numpy<2" "opencv-python<4.11" "tensorflow==2.16.1" "tf-keras==2.16.0"
 
-# Copy toan bo ma nguon cua Worker vao container
 COPY . .
 
-# Lenh chay mac dinh (Co the bi ghi de boi docker-compose.yml)
-CMD ["python", "-m", "worker.tasks.task_embedding"]
+# Chay task mac dinh
+CMD ["python", "-m", "task_embedding"]
