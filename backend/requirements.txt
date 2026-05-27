@@ -12,3 +12,4 @@ deepface==0.0.84
 opencv-python-headless==4.9.0.80
 tf-keras==2.15.0
 retina-face==0.0.14
+prometheus-fastapi-instrumentator==7.0.0

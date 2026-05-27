@@ -6,6 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from deepface import DeepFace
 
+# [THEM DONG NAY] Import thu vien thu thap metric cho Prometheus
+from prometheus_fastapi_instrumentator import Instrumentator
+
 from app.core.config import settings
 from app.models.database import engine
 from app.models import schemas
@@ -19,9 +22,9 @@ logger = logging.getLogger(__name__)
 os.makedirs("temp_images", exist_ok=True)
 
 # Tao cac bang trong CSDL neu chua ton tai
-schemas.Base.metadata.create_all(bind=engine)
+# XOA DONG NAY: schemas.Base.metadata.create_all(bind=engine)
 
-# Quan ly vong doi cua app (thay the cho on_event startup cu)
+# Quan ly vong doi cua app (thay electric cho on_event startup cu)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Logic chay truoc khi app bat dau nhan request
@@ -41,6 +44,9 @@ async def lifespan(app: FastAPI):
 
 # Khoi tao app FastAPI
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
+
+# [THEM DONG NAY] Kich hoat viec thu thap metrics cho Prometheus tai endpoint /metrics
+Instrumentator().instrument(app).expose(app)
 
 # Cau hinh CORS cho phep Frontend goi API
 app.add_middleware(
