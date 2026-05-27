@@ -1,6 +1,6 @@
 # BTL: Hệ thống Check-in Sự kiện và Chống Vé Chợ Đen dựa trên Nhận diện Khuôn mặt
 
-![Python](https://img.shields.io/badge/Major-Artificial_Intelligence)
+![Python](https://img.shields.io/badge/Major-Artificial_Intelligence-red)
 ![Course](https://img.shields.io/badge/Course-AI_System_Development_Practice-green)
 ![School](https://img.shields.io/badge/School-UET_VNU-blue)
 
