@@ -1,23 +1,8 @@
-sequenceDiagram
-    participant Kiosk as Frontend Kiosk
-    participant API as FastAPI Backend
-    participant MinIO as MinIO Storage
-    participant MQ as RabbitMQ
-    participant Worker as AI Worker
-    participant DB as Qdrant & Postgres
+# Kiến Trúc Hệ Thống (System Architecture)
 
-    Kiosk->>API: 1. Chụp ảnh & Gửi API (Kèm Ticket)
-    API->>MinIO: 2. Lưu ảnh tạm thời
-    API->>MQ: 3. Gửi Message (Job) vào Hàng đợi
-    API-->>Kiosk: 4. Trả về "Đang xử lý"
-    MQ->>Worker: 5. Worker lấy Job từ Hàng đợi
-    Worker->>Worker: 6. Trích xuất khuôn mặt (DeepFace)
-    Worker->>DB: 7. So khớp Vector & Cập nhật trạng thái
-    DB-->>Worker: 8. Trả kết quả (Match / No Match)
-    Worker->>API: 9. Báo cáo kết quả qua Webhook / Redis
-    API->>Kiosk: 10. Gắn tín hiệu WebSocket báo "Thành công/Thất bại"
+## 1. Sơ đồ Triển khai (Deployment Diagram)    
     
-    
+```mermaid
 graph TD
     User((Người dùng)) --> Nginx
     Admin((Quản trị viên)) --> Nginx
@@ -50,3 +35,27 @@ graph TD
         Prometheus --> MQ
         Grafana --> Prometheus
     end
+```
+
+## 2.Sơ đồ Luồng hoạt động (Sequence Diagram)
+
+```mermaid
+sequenceDiagram
+    participant Kiosk as Frontend Kiosk
+    participant API as FastAPI Backend
+    participant MinIO as MinIO Storage
+    participant MQ as RabbitMQ
+    participant Worker as AI Worker
+    participant DB as Qdrant & Postgres
+
+    Kiosk->>API: 1. Chụp ảnh & Gửi API (Kèm Ticket)
+    API->>MinIO: 2. Lưu ảnh tạm thời
+    API->>MQ: 3. Gửi Message (Job) vào Hàng đợi
+    API-->>Kiosk: 4. Trả về "Đang xử lý"
+    MQ->>Worker: 5. Worker lấy Job từ Hàng đợi
+    Worker->>Worker: 6. Trích xuất khuôn mặt (DeepFace)
+    Worker->>DB: 7. So khớp Vector & Cập nhật trạng thái
+    DB-->>Worker: 8. Trả kết quả (Match / No Match)
+    Worker->>API: 9. Báo cáo kết quả qua Webhook / Redis
+    API->>Kiosk: 10. Gắn tín hiệu WebSocket báo "Thành công/Thất bại"
+```
