@@ -45,11 +45,17 @@ jobs:
           
       - name: Start RabbitMQ and MinIO
         run: |
-          docker run -d --network host --name rabbitmq rabbitmq:3
-          docker run -d --network host --name minio -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin minio/minio server /data
+          # Tao thang mot tai khoan admin moi cho RabbitMQ de xoa bo luat cam IP
+          docker run -d -p 5672:5672 --name rabbitmq -e RABBITMQ_DEFAULT_USER=admin -e RABBITMQ_DEFAULT_PASS=adminpassword rabbitmq:3
+          
+          # Bat MinIO binh thuong qua port
+          docker run -d -p 9000:9000 --name minio -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin minio/minio server /data
+          
           sleep 5
+          
           docker exec minio mkdir -p /data/event-logs
           docker exec minio mkdir -p /data/avatars
+          
           echo "127.0.0.1 minio rabbitmq" | sudo tee -a /etc/hosts
           
       - name: Run Pytest
@@ -58,8 +64,9 @@ jobs:
           TF_USE_LEGACY_KERAS: "1"
           MINIO_ACCESS_KEY: "minioadmin"
           MINIO_SECRET_KEY: "minioadmin"
-          RABBITMQ_USER: "guest"
-          RABBITMQ_PASSWORD: "guest"
+          # Truyen dung tai khoan admin vua tao o tren vao cho Pytest
+          RABBITMQ_USER: "admin"
+          RABBITMQ_PASSWORD: "adminpassword"
         run: |
           cd backend
           python -m pytest tests/
