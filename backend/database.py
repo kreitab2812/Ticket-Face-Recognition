@@ -1,17 +1,17 @@
 import os
-from sqlalchemy import create_create_engine, create_engine
+from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from minio import Minio
 
-# 1. Cấu hình kết nối PostgreSQL (Sử dụng tên service 'postgres' trong Docker)
-DATABASE_URL = "postgresql://admin:adminpassword@postgres:5432/access_control"
+# uu tien lay tu file .env, neu khong co thi dung default
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://admin:adminpassword@postgres:5432/event_checkin")
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Lấy một session kết nối tới DB
+# init db session
 def get_db():
     db = SessionLocal()
     try:
@@ -19,23 +19,25 @@ def get_db():
     finally:
         db.close()
 
-# 2. Cấu hình kết nối MinIO Object Storage (Sử dụng tên service 'minio' trong Docker)
-MINIO_URL = "minio:9000"
-MINIO_ACCESS_KEY = "admin"
-MINIO_SECRET_KEY = "adminpassword"
-BUCKET_NAME = "attendance-images"
+# config minio storage
+MINIO_URL = os.getenv("MINIO_URL", "minio:9000")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "admin")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "adminpassword")
+
+# doi ten bucket cho dung context
+BUCKET_NAME = "checkin-images"
 
 minio_client = Minio(
     MINIO_URL,
     access_key=MINIO_ACCESS_KEY,
     secret_key=MINIO_SECRET_KEY,
-    secure=False  # Chạy nội bộ không cần https
+    secure=False  # chay mang local docker nen ko can ssl
 )
 
-# Tự động tạo bucket chứa ảnh nếu chưa tồn tại
+# tu tao bucket neu db trang
 try:
     if not minio_client.bucket_exists(BUCKET_NAME):
         minio_client.make_bucket(BUCKET_NAME)
-        print(f"[+] Đã tạo bucket '{BUCKET_NAME}' thành công trên MinIO.")
+        print(f"Created bucket {BUCKET_NAME}")
 except Exception as e:
-    print(f"[-] Không thể khởi tạo bucket MinIO: {e}")
+    print(f"MinIO error: {e}") # throw loi ra terminal check cho nhanh

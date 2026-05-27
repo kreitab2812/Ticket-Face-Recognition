@@ -7,17 +7,15 @@ import json
 import shutil
 import os
 import traceback
-import cv2
-import numpy as np
 import datetime
 from deepface import DeepFace
 from qdrant_client import QdrantClient
 
-# Kết nối hạ tầng Database & Storage
+# import tu file database.py va models.py
 from database import engine, get_db, minio_client, BUCKET_NAME
 import models
 
-app = FastAPI(title="Face Recognition Access Control API")
+app = FastAPI(title="Event Check-in System API")
 os.makedirs("temp_images", exist_ok=True)
 
 app.add_middleware(
@@ -28,126 +26,101 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Khởi tạo cấu trúc bảng dữ liệu
+# tao bang neu chua co
 models.Base.metadata.create_all(bind=engine)
 
-# Kết nối Vector DB
+# connect Qdrant
 qdrant = QdrantClient(host="qdrant", port=6333)
 
-# Cấu hình bộ phân tích khuôn mặt siêu nhẹ OpenCV
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+# Warm-up model ArcFace luc khoi dong server de request dau tien khong bi lag
+@app.on_event("startup")
+def startup_event():
+    print("[*] Dang warm-up model AI...")
+    try:
+        DeepFace.build_model("ArcFace")
+        DeepFace.build_model("RetinaFace")
+    except:
+        pass
 
-def check_face_gatekeeper(image_path):
-    """Lọc màn hình trống, chọn khuôn mặt lớn nhất và cắt ảnh tối ưu"""
-    img = cv2.imread(image_path)
-    if img is None:
-        return False, None, "Không thể đọc dữ liệu ảnh."
-
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(50, 50))
-
-    if len(faces) == 0:
-        return False, None, "Không phát hiện khuôn mặt nào."
-
-    largest_face = max(faces, key=lambda rect: rect[2] * rect[3])
-    x, y, w, h = largest_face
-
-    if w < 100:
-        return False, None, "Vui lòng đứng gần camera hơn."
-
-    margin = 20
-    h_img, w_img = img.shape[:2]
-    x1, y1 = max(0, x - margin), max(0, y - margin)
-    x2, y2 = min(w_img, x + w + margin), min(h_img, y + h + margin)
-
-    cropped_face = img[y1:y2, x1:x2]
-    cropped_path = image_path.replace(".jpg", "_cropped.jpg")
-    cv2.imwrite(cropped_path, cropped_face)
-
-    return True, cropped_path, "OK"
-
-def check_ir_liveness(ir_image_path):
-    """Phân tích phương sai ảnh hồng ngoại chống giả mạo"""
-    img = cv2.imread(ir_image_path, cv2.IMREAD_GRAYSCALE)
-    if img is None:
-        return False
-    variance = cv2.Laplacian(img, cv2.CV_64F).var()
-    return variance > 50
 
 @app.get("/")
 def read_root():
-    return {"message": "Backend is running với đầy đủ nghiệp vụ!"}
+    return {"message": "Backend check-in su kien is running!"}
 
-@app.post("/admin/add_employee")
-async def add_employee(
+
+@app.post("/admin/add_attendee")
+async def add_attendee(
     name: str = Form(...), 
+    ticket_code: str = Form(...), # them ma ve
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
     try:
-        # 1. Ghi nhận thông tin nhân sự vào PostgreSQL trước
-        new_employee = models.Employee(name=name, status="Active")
-        db.add(new_employee)
-        db.commit()
-        db.refresh(new_employee)
+        # 1. Luu khach vao postgres
+        # check xem ma ve ton tai chua
+        exist_ticket = db.query(models.Attendee).filter(models.Attendee.ticket_code == ticket_code).first()
+        if exist_ticket:
+            return {"status": "error", "message": "Ma ve nay da ton tai trong he thong!"}
 
-        # 2. Lưu file ảnh mẫu cục bộ để đưa vào luồng AI ngầm
-        file_path = f"temp_images/emp_{new_employee.id}_{file.filename}"
+        new_attendee = models.Attendee(name=name, ticket_code=ticket_code)
+        db.add(new_attendee)
+        db.commit()
+        db.refresh(new_attendee)
+
+        # 2. Luu file anh tam thoi
+        file_path = f"temp_images/ticket_{ticket_code}_{file.filename}"
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # 3. Đẩy thông tin qua Message Queue (RabbitMQ) để Worker lưu vào Qdrant
+        # 3. Ban event sang RabbitMQ cho worker chay ngam
         credentials = pika.PlainCredentials('admin', 'adminpassword')
         connection = pika.BlockingConnection(
             pika.ConnectionParameters(host='rabbitmq', credentials=credentials)
         )
         channel = connection.channel()
-        channel.queue_declare(queue='face_processing')
+        channel.queue_declare(queue='ticket_processing')
 
-        message = {"name": name, "image_path": file_path}
-        channel.basic_publish(exchange='', routing_key='face_processing', body=json.dumps(message))
+        # gui ca ticket_code sang de worker luu vao payload Qdrant
+        message = {"name": name, "ticket_code": ticket_code, "image_path": file_path}
+        channel.basic_publish(exchange='', routing_key='ticket_processing', body=json.dumps(message))
         connection.close()
 
         return {
             "status": "success", 
-            "id": new_employee.id, 
-            "employee": name, 
-            "message": "Đã tạo profile hệ thống và đẩy ảnh vào hàng đợi AI."
+            "id": new_attendee.id, 
+            "message": "Da luu khach tham du va day vao hang doi AI."
         }
     except Exception as e:
         db.rollback()
         traceback.print_exc()
-        return {"status": "error", "message": f"Lỗi thêm nhân viên: {str(e)}"}
+        return {"status": "error", "message": f"Loi he thong: {str(e)}"}
 
-@app.post("/recognize")
-async def recognize_face(
+
+@app.post("/check-in")
+async def check_in_event(
     file_rgb: UploadFile = File(...), 
-    file_ir: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    rgb_path = f"temp_images/rec_rgb_{file_rgb.filename}"
-    ir_path = f"temp_images/rec_ir_{file_ir.filename}"
+    # Bo file IR di vi lam web ko truy cap dc
+    rgb_path = f"temp_images/checkin_{file_rgb.filename}"
     
     with open(rgb_path, "wb") as buffer:
         shutil.copyfileobj(file_rgb.file, buffer)
-    with open(ir_path, "wb") as buffer:
-        shutil.copyfileobj(file_ir.file, buffer)
 
     try:
-        # 1. Gatekeeper kiểm tra sự xuất hiện của cấu trúc khuôn mặt
-        is_valid_face, cropped_rgb_path, msg = check_face_gatekeeper(rgb_path)
-        if not is_valid_face:
-            return {"status": "ignored", "message": msg}
+        # 1. Extract vector bang ArcFace + RetinaFace (xac suat bat mat cuc chuan)
+        try:
+            embedding_objs = DeepFace.represent(
+                img_path=rgb_path, 
+                model_name="ArcFace", 
+                detector_backend="retinaface", # thay cho cai haarcascade cùi bắp
+                enforce_detection=True
+            )
+            embedding = embedding_objs[0]["embedding"]
+        except ValueError:
+            return {"status": "error", "message": "Khong tim thay khuon mat hop le trong camera."}
 
-        # 2. Liveness Detection phân tích tầng hồng ngoại thực tế
-        if not check_ir_liveness(ir_path):
-            return {"status": "error", "message": "Phát hiện giả mạo! Hệ thống từ chối xác thực."}
-
-        # 3. Trích xuất đặc trưng vector bằng mô hình chiến lược ArcFace
-        embedding_objs = DeepFace.represent(img_path=cropped_rgb_path, model_name="ArcFace", enforce_detection=False)
-        embedding = embedding_objs[0]["embedding"]
-
-        # Tìm kiếm thực thể trùng khớp trong Vector DB
+        # 2. Tim Kiem Vector trong Qdrant
         search_result = qdrant.query_points(
             collection_name="faces_arcface",
             query=embedding,
@@ -156,104 +129,86 @@ async def recognize_face(
         ).points
 
         if not search_result:
-            return {"status": "success", "access": "denied", "employee": "Unknown"}
+            return {"status": "denied", "message": "Khong tim thay thong tin ve tren he thong!"}
 
-        # Phát hiện ra danh tính từ vector payload
-        matched_name = search_result[0].payload["name"]
-        score = search_result[0].score
+        # Lay ticket_code tu Qdrant thay vi name
+        matched_ticket_code = search_result[0].payload["ticket_code"]
+        
+        # 3. Check du lieu trong Postgres
+        attendee = db.query(models.Attendee).filter(models.Attendee.ticket_code == matched_ticket_code).first()
 
-        # Truy vấn thông tin chi tiết nhân sự từ PostgreSQL
-        employee = db.query(models.Employee).filter(
-            models.Employee.name == matched_name, 
-            models.Employee.status == "Active"
-        ).first()
+        if not attendee:
+            return {"status": "denied", "message": "Loi dong bo db: Khong tim thay thong tin khach."}
 
-        if not employee:
-            return {"status": "success", "access": "denied", "employee": "Unknown (Profile không tồn tại)"}
-
-        # --- XỬ LÝ LOGIC NGHIỆP VỤ CHẤM CÔNG ---
+        # --- LOGIC CHONG VE CHO DEN ---
         now = datetime.datetime.now()
-        today_start = datetime.datetime.combine(now.date(), datetime.time.min)
-        today_end = datetime.datetime.combine(now.date(), datetime.time.max)
-
-        # Kiểm tra lịch sử chấm công của nhân viên trong ngày hôm nay
-        last_log = db.query(models.AttendanceLog).filter(
-            models.AttendanceLog.employee_id == employee.id,
-            models.AttendanceLog.check_time >= today_start,
-            models.AttendanceLog.check_time <= today_end
-        ).order_by(models.AttendanceLog.check_time.desc()).first()
-
-        # Luật 1: Chống Spam nhận diện trùng lặp (Giới hạn khoảng cách 5 phút)
-        if last_log:
-            time_delta = now - last_log.check_time
-            if time_delta.total_seconds() < 300:
-                return {
-                    "status": "ignored", 
-                    "message": f"Nhân viên {employee.name} vừa chấm công cách đây ít phút."
-                }
-
-        # Luật 2: Phân biệt Check-in / Check-out và Tính toán đi muộn / về sớm
-        if not last_log:
-            action_type = "CHECK-IN"
-            # Quy định mốc vào ca muộn nhất là 08:30 AM
-            attendance_status = "Đúng giờ" if now.time() <= datetime.time(8, 30) else "Đi muộn"
+        
+        if attendee.is_checked_in == True:
+            # Ve da xai -> bao dong do
+            checkin_status = "Cảnh báo vé chợ đen"
+            access = "denied"
+            msg = f"CẢNH BÁO: Vé {attendee.ticket_code} của {attendee.name} đã được sử dụng trước đó!"
         else:
-            action_type = "CHECK-OUT"
-            # Quy định mốc tan ca sớm nhất là 05:30 PM (17:30)
-            attendance_status = "Đúng giờ" if now.time() >= datetime.time(17, 30) else "Về sớm"
+            # Ve moi -> cho qua
+            attendee.is_checked_in = True 
+            checkin_status = "Hợp lệ"
+            access = "granted"
+            msg = f"Check-in thanh cong! Xin chao {attendee.name}."
 
-        # Luật 3: Tải ảnh bằng chứng lên MinIO Object Storage
-        object_name = f"attendance/emp_{employee.id}_{now.strftime('%Y%m%d_%H%M%S')}.jpg"
-        minio_client.fput_object(BUCKET_NAME, object_name, cropped_rgb_path)
+        # 4. Upload anh chup camera len Minio lam bang chung
+        object_name = f"event-logs/{attendee.ticket_code}_{now.strftime('%Y%m%d_%H%M%S')}.jpg"
+        minio_client.fput_object(BUCKET_NAME, object_name, rgb_path)
         image_url = f"http://127.0.0.1:9000/{BUCKET_NAME}/{object_name}"
 
-        # 4. Ghi dữ liệu nhật ký chấm công chính thức xuống PostgreSQL
-        new_log = models.AttendanceLog(
-            employee_id=employee.id,
+        # 5. Ghi log
+        new_log = models.CheckInLog(
+            attendee_id=attendee.id,
             check_time=now,
-            action_type=action_type,
             image_url=image_url,
-            status=attendance_status
+            status=checkin_status
         )
         db.add(new_log)
         db.commit()
 
         return {
             "status": "success",
-            "access": "granted",
-            "employee": employee.name,
-            "action": action_type,
-            "attendance_status": attendance_status,
-            "time": now.strftime("%H:%M:%S"),
-            "score": score
+            "access": access,
+            "message": msg,
+            "attendee": attendee.name,
+            "ticket_code": attendee.ticket_code,
+            "time": now.strftime("%H:%M:%S")
         }
         
     except Exception as e:
         traceback.print_exc()
-        return {"status": "error", "message": f"Hệ thống gặp lỗi: {str(e)}"}
+        return {"status": "error", "message": f"He thong gap loi: {str(e)}"}
 
-# --- THÊM MỚI CÁC API PHỤC VỤ TRANG QUẢN TRỊ ADMIN ---
+
+# --- API ADMIN ---
 @app.get("/admin/logs")
-def get_attendance_logs(db: Session = Depends(get_db)):
-    """Lấy toàn bộ nhật ký chấm công hiển thị ra trang quản trị"""
-    logs = db.query(models.AttendanceLog).order_by(models.AttendanceLog.check_time.desc()).all()
+def get_checkin_logs(db: Session = Depends(get_db)):
+    logs = db.query(models.CheckInLog).order_by(models.CheckInLog.check_time.desc()).all()
     result = []
     for log in logs:
         result.append({
             "id": log.id,
-            "employee_name": log.employee.name,
+            "attendee_name": log.attendee.name,
+            "ticket_code": log.attendee.ticket_code,
             "check_time": log.check_time.strftime("%Y-%m-%d %H:%M:%S"),
-            "action_type": log.action_type,
             "status": log.status,
             "image_url": log.image_url
         })
     return result
 
-@app.get("/admin/employees")
-def get_all_employees(db: Session = Depends(get_db)):
-    """Lấy danh sách toàn bộ nhân sự"""
-    employees = db.query(models.Employee).all()
-    return [{"id": emp.id, "name": emp.name, "status": emp.status} for emp in employees]
+@app.get("/admin/attendees")
+def get_all_attendees(db: Session = Depends(get_db)):
+    attendees = db.query(models.Attendee).all()
+    return [{
+        "id": a.id, 
+        "name": a.name, 
+        "ticket_code": a.ticket_code, 
+        "is_checked_in": a.is_checked_in
+    } for a in attendees]
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

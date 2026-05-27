@@ -1,29 +1,33 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 import datetime
 from database import Base
 
-class Employee(Base):
-    __tablename__ = "employees"
+class Attendee(Base):
+    __tablename__ = "attendees"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     name = Column(String, nullable=False, index=True)
-    status = Column(String, default="Active")  # Active (Đang làm), Inactive (Đã nghỉ)
+    ticket_code = Column(String, unique=True, nullable=False, index=True) # mã vé
+    
+    # flag quan trọng nhất để check vé chợ đen
+    is_checked_in = Column(Boolean, default=False) 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
-    # Thiết lập mối quan hệ với bảng nhật ký chấm công
-    logs = relationship("AttendanceLog", back_populates="employee", cascade="all, delete-orphan")
+    # map vs log
+    logs = relationship("CheckInLog", back_populates="attendee", cascade="all, delete-orphan")
 
 
-class AttendanceLog(Base):
-    __tablename__ = "attendance_logs"
+class CheckInLog(Base):
+    __tablename__ = "checkin_logs"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    employee_id = Column(Integer, ForeignKey("employees.id", ondelete="CASCADE"), nullable=False)
+    attendee_id = Column(Integer, ForeignKey("attendees.id", ondelete="CASCADE"), nullable=False)
     check_time = Column(DateTime, default=datetime.datetime.utcnow)
-    action_type = Column(String, nullable=False)  # CHECK-IN hoặc CHECK-OUT
-    image_url = Column(String, nullable=True)     # Đường dẫn tới file ảnh lưu trên MinIO
-    status = Column(String, nullable=False)       # Đúng giờ, Đi muộn, Về sớm
+    
+    # status: "Hợp lệ" hoặc "Cảnh báo vé chợ đen"
+    status = Column(String, nullable=False) 
+    # link file ảnh chụp camera cổng
+    image_url = Column(String, nullable=True) 
 
-    # Thiết lập mối quan hệ ngược lại với bảng nhân viên
-    employee = relationship("Employee", back_populates="logs")
+    attendee = relationship("Attendee", back_populates="logs")

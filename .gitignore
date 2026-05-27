@@ -1,16 +1,23 @@
-# Bỏ qua dữ liệu cục bộ của các Container (Bắt buộc)
+# Data cua cac Container (Tuyet doi khong push len Github)
 pg_data/
 minio_data/
 qdrant_data/
 backend/temp_images/
 
-# Bỏ qua các file ảnh tạm sinh ra trong quá trình test
+# File bao mat
+.env
+
+# Python va he dieu hanh
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.DS_Store
+Thumbs.db
+
+# Anh va video rac luc test
 *.jpg
 *.jpeg
 *.png
-
-# Bỏ qua file rác hệ thống và python cache
-__pycache__/
-*.pyc
-.DS_Store
-.env
+*.mp4

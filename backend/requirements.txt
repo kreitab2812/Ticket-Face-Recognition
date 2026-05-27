@@ -9,3 +9,4 @@ python-multipart
 deepface
 opencv-python-headless
 tf-keras
+retinaface
