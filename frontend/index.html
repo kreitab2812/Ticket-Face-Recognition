@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiosk Chấm Công AI</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.11.1/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-base-200 min-h-screen flex flex-col items-center justify-center p-4">
+    
+    <div class="absolute top-4 right-4">
+        <a href="admin.html" class="btn btn-outline btn-sm">🔒 Quản trị viên</a>
+    </div>
+
+    <div class="card w-full max-w-4xl bg-base-100 shadow-2xl">
+        <div class="card-body items-center text-center">
+            
+            <div class="mb-4">
+                <h1 id="clock" class="text-5xl font-mono font-bold text-primary tracking-widest">00:00:00</h1>
+                <p id="date" class="text-lg font-medium text-base-content/70 mt-1">Đang tải ngày tháng...</p>
+            </div>
+            
+            <div class="relative w-full aspect-video bg-black rounded-xl overflow-hidden border-4 border-neutral shadow-inner">
+                <video id="videoRGB" class="w-full h-full object-cover transform -scale-x-100" autoplay muted></video>
+                
+                <div class="absolute bottom-4 right-4 w-1/4 aspect-video bg-black rounded-lg border-2 border-error overflow-hidden shadow-lg z-10">
+                    <span class="absolute top-1 left-1 bg-error text-white text-[10px] font-bold px-1 rounded z-20">IR SENSOR</span>
+                    <video id="videoIR" class="w-full h-full object-cover transform -scale-x-100 grayscale contrast-125" autoplay muted></video>
+                </div>
+
+                <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div class="w-64 h-64 border-2 border-primary border-dashed rounded-3xl opacity-30"></div>
+                </div>
+            </div>
+
+            <div id="resultAlert" class="alert alert-info mt-6 w-full max-w-md shadow-lg transition-all duration-300">
+                <span id="resultText" class="font-medium text-lg">Hệ thống đang sẵn sàng...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Cập nhật đồng hồ
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString('vi-VN', { hour12: false });
+            document.getElementById('date').innerText = now.toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        const videoRGB = document.getElementById('videoRGB');
+        const videoIR = document.getElementById('videoIR');
+        const resultAlert = document.getElementById('resultAlert');
+        const resultText = document.getElementById('resultText');
+        let isProcessing = false;
+
+        async function startCameras() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                if (videoDevices.length === 0) throw new Error("Không tìm thấy camera!");
+
+                const streamRGB = await navigator.mediaDevices.getUserMedia({ video: { deviceId: videoDevices[0].deviceId } });
+                videoRGB.srcObject = streamRGB;
+
+                const irDeviceId = videoDevices.length > 1 ? videoDevices[1].deviceId : videoDevices[0].deviceId;
+                const streamIR = await navigator.mediaDevices.getUserMedia({ video: { deviceId: irDeviceId } });
+                videoIR.srcObject = streamIR;
+            } catch (err) {
+                console.error("Lỗi camera: ", err);
+                resultText.innerText = "Lỗi kết nối Camera!";
+                resultAlert.className = "alert alert-error mt-6 w-full max-w-md shadow-lg text-white";
+            }
+        }
+
+        function captureVideoToBlob(videoElement) {
+            return new Promise((resolve) => {
+                const canvas = document.createElement('canvas');
+                const scale = Math.min(640 / videoElement.videoWidth, 1);
+                canvas.width = videoElement.videoWidth * scale;
+                canvas.height = videoElement.videoHeight * scale;
+                canvas.getContext('2d').drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob(resolve, 'image/jpeg', 0.8);
+            });
+        }
+
+        async function captureAndRecognize() {
+            if (isProcessing || !videoRGB.videoWidth || !videoIR.videoWidth) return;
+            isProcessing = true;
+
+            try {
+                const [blobRGB, blobIR] = await Promise.all([captureVideoToBlob(videoRGB), captureVideoToBlob(videoIR)]);
+                const formData = new FormData();
+                formData.append('file_rgb', blobRGB, 'rgb.jpg');
+                formData.append('file_ir', blobIR, 'ir.jpg');
+
+                const response = await fetch('http://127.0.0.1:8000/recognize', { method: 'POST', body: formData });
+                const data = await response.json();
+
+                if (data.status === "success" && data.access === "granted") {
+                    // Phân loại màu sắc thông báo dựa trên trạng thái (Đúng giờ = Xanh, Muộn = Vàng)
+                    const statusColor = data.attendance_status === "Đúng giờ" ? "text-green-200" : "text-yellow-300";
+                    resultText.innerHTML = `
+                        <strong>${data.employee}</strong> <br/>
+                        <span class="text-sm">${data.action} lúc ${data.time} - <span class="${statusColor}">${data.attendance_status}</span></span>
+                    `;
+                    resultAlert.className = "alert alert-success mt-6 w-full max-w-md shadow-lg text-white";
+                    setTimeout(() => { resultAlert.className = "alert alert-info mt-6 w-full max-w-md shadow-lg opacity-50"; resultText.innerText = "Sẵn sàng quét tiếp theo..."; }, 4000);
+                } else if (data.status === "error") {
+                    resultText.innerText = data.message;
+                    resultAlert.className = "alert alert-error mt-6 w-full max-w-md shadow-lg text-white";
+                } else if (data.status === "ignored") {
+                    // Bỏ qua im lặng, không làm chớp màn hình
+                    console.log("Gatekeeper:", data.message);
+                } else {
+                    resultText.innerText = "Truy cập bị từ chối! Người lạ.";
+                    resultAlert.className = "alert alert-error mt-6 w-full max-w-md shadow-lg text-white";
+                }
+            } catch (error) {
+                console.error("Lỗi API:", error);
+            } finally {
+                setTimeout(() => { isProcessing = false; }, 1000); // 1 giây quét 1 lần
+            }
+        }
+
+        startCameras();
+        videoRGB.addEventListener('playing', () => { setInterval(captureAndRecognize, 1000); });
+    </script>
+</body>
+</html>

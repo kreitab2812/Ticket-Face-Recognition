@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+pika
+qdrant-client
+minio
+psycopg2-binary
+sqlalchemy
+python-multipart
+deepface
+opencv-python-headless
+tf-keras
