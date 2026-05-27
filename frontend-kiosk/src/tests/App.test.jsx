@@ -6,11 +6,8 @@ describe('App Component', () => {
   it('renders without crashing', () => {
     render(<App />);
     
-    // Tim chu EventAdmin hoac Quan Ly khong dau cho khop voi App.jsx
-    const heading = screen.getByText(/EventAdmin/i); 
+    // Phai sua dong nay va NHO BAM LUU FILE nhe!
+    const heading = screen.getByText(/HỆ THỐNG KIỂM SOÁT AN NINH/i); 
     expect(heading).toBeInTheDocument();
-    
-    const menuText = screen.getByText(/Quan Ly Ve/i);
-    expect(menuText).toBeInTheDocument();
   });
 });

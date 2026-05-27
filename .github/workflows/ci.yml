@@ -1,0 +1,94 @@
+name: CI & Docker Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          
+      - name: Install dependencies
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install "numpy<2" "opencv-python<4.11" "tensorflow==2.16.1" "tf-keras==2.16.0" "httpx<0.28.0"
+          
+      - name: Run Pytest
+        run: |
+          cd backend
+          python -m pytest tests/
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          
+      - name: Test Admin
+        run: |
+          cd frontend-admin
+          npm install --legacy-peer-deps
+          npm run test
+          
+      - name: Test Kiosk
+        run: |
+          cd frontend-kiosk
+          npm install --legacy-peer-deps
+          npm run test
+
+  build-and-push:
+    needs: [test-backend, test-frontend]
+    runs-on: ubuntu-latest
+    
+    # Cap quyen cho GitHub Actions de no co the day anh (push image) len repo
+    permissions:
+      contents: read
+      packages: write
+      
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Dang nhap vao GitHub Container Registry tu dong
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Build and push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          # Ten image se tu dong gan voi ten tai khoan GitHub cua cau
+          tags: ghcr.io/${{ github.repository_owner }}/btl-backend:latest
+          
+      - name: Build and push Admin
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend-admin
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/btl-admin:latest
+          
+      - name: Build and push Kiosk
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend-kiosk
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/btl-kiosk:latest

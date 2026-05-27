@@ -15,5 +15,10 @@ export default defineConfig({
         ws: true // Ho tro WebSocket cho Kiosk
       }
     }
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/setupTests.js',
   }
 })
