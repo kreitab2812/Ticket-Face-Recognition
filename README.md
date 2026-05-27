@@ -4,8 +4,10 @@
 ![Course](https://img.shields.io/badge/Course-AI_System_Development_Practice-green)
 ![School](https://img.shields.io/badge/School-UET_VNU-blue)
 
-**Môn học:** Kỹ nghệ hệ thống trí tuệ nhân tạo (Thực hành phát triển hệ thống trí tuệ nhân tạo)
+**Môn học:** Thực hành phát triển hệ thống trí tuệ nhân tạo - AIT3004_4
+
 **Học kỳ:** 2, 2025–2026
+
 **Trường:** Đại học Công nghệ, ĐHQG Hà Nội (UET-VNU)
 
 ---
@@ -13,15 +15,11 @@
 ## Thông tin Giảng viên và Sinh viên
 
 **Nhóm Giảng viên hướng dẫn & đánh giá:**
-- ThS. Đào Việt Anh (daovietanh190499)
-- ThS. Nguyễn Toàn (Toan-Nguyen26)
-- ThS. Bá (anhsuplo-87)
-- ThS. Huỳnh (20020054-spm)
-- ThS. Hùng (hphungg)
+- ThS. Nguyễn Hải Toàn (Toan-Nguyen26)
 
 **Sinh viên thực hiện:**
-- Tên sinh viên: [Điền tên của bạn]
-- Mã sinh viên: [Điền MSSV]
+- Tên sinh viên: Đinh Mạnh Cường
+- Mã sinh viên: 24022274
 - Vai trò: Phát triển Full-stack, Cấu hình luồng xử lý AI và Triển khai hạ tầng (System Architecture & DevOps)
 
 ---
@@ -126,7 +124,7 @@ Tạo tệp `.env` từ tệp mẫu `.env.example` để thiết lập các thô
 cp .env.example .env
 ```
 
-(Lưu ý: Có thể giữ nguyên các giá trị mặc định trong .env.example để kiểm thử cục bộ). 
+(Lưu ý: Có thể giữ nguyên các giá trị mặc định trong `.env.example` để kiểm thử cục bộ). 
 
 ### Bước 3: Khởi chạy hệ thống
 
