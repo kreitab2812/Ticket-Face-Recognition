@@ -1,4 +1,4 @@
-# Bài Tập Lớn: Hệ thống Check-in Sự kiện và Chống Vé Chợ Đen dựa trên Nhận diện Khuôn mặt
+# BTL: Hệ thống Check-in Sự kiện và Chống Vé Chợ Đen dựa trên Nhận diện Khuôn mặt
 
 ![Python](https://img.shields.io/badge/Python-3.13.7-red)
 ![Course](https://img.shields.io/badge/Course-AI_System_Development_Practice-green)
