@@ -10,7 +10,6 @@ jobs:
   test-backend:
     runs-on: ubuntu-latest
     
-    # Khoi tao Database ao ngay tren GitHub Actions
     services:
       postgres:
         image: postgres:15
@@ -19,7 +18,7 @@ jobs:
           POSTGRES_PASSWORD: adminpassword
           POSTGRES_DB: event_checkin
         ports:
-          - 5432:5432
+          - "5432:5432"
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -44,19 +43,13 @@ jobs:
           pip install -r requirements.txt
           pip install "numpy<2" "opencv-python<4.11" "tensorflow==2.16.1" "tf-keras==2.16.0" "httpx<0.28.0" pytest
           
-- name: Start RabbitMQ and MinIO
+      - name: Start RabbitMQ and MinIO
         run: |
-          # Them --network host de vuot qua tinh nang chan IP la cua RabbitMQ
           docker run -d --network host --name rabbitmq rabbitmq:3
-          
-          # Bat MinIO tuong tu
           docker run -d --network host --name minio -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin minio/minio server /data
-          
           sleep 5
-          
           docker exec minio mkdir -p /data/event-logs
           docker exec minio mkdir -p /data/avatars
-          
           echo "127.0.0.1 minio rabbitmq" | sudo tee -a /etc/hosts
           
       - name: Run Pytest
@@ -65,7 +58,6 @@ jobs:
           TF_USE_LEGACY_KERAS: "1"
           MINIO_ACCESS_KEY: "minioadmin"
           MINIO_SECRET_KEY: "minioadmin"
-          # Khai bao truc tiep tai khoan mac dinh de dam bao pika dang nhap thanh cong
           RABBITMQ_USER: "guest"
           RABBITMQ_PASSWORD: "guest"
         run: |
