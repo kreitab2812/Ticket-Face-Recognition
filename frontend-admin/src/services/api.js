@@ -43,10 +43,11 @@ export const getCheckInLogs = async () => {
 // API: Thêm khách mời mới (Hỗ trợ upload File ảnh)
 export const addAttendee = async (formData) => {
     try {
-        // Ghi đè header Content-Type thành multipart/form-data cho riêng API này để gửi được File
         const response = await apiClient.post('/admin/add_attendee', formData, {
             headers: {
-                'Content-Type': 'multipart/form-data'
+                // CHÚ Ý: Phải set undefined để trình duyệt tự động điền 'multipart/form-data' 
+                // kèm theo chuỗi phân tách (boundary). Nếu viết cứng sẽ làm hỏng file ảnh!
+                'Content-Type': undefined
             }
         });
         return response;

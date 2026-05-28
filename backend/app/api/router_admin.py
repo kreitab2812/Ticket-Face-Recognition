@@ -2,7 +2,6 @@ from fastapi import APIRouter, UploadFile, File, Form, Depends
 from sqlalchemy.orm import Session
 import pika
 import json
-import shutil
 import traceback
 import uuid
 import os
@@ -28,13 +27,18 @@ async def add_attendee(
         if exist_ticket:
             return {"status": "error", "message": "Ma ve nay da ton tai trong he thong!"}
 
-        # Fix bao mat Path Traversal: Tao ten file tu ma ve va UUID
+        # Tao ten file ngau nhien de chong trung lap
         file_ext = os.path.splitext(file.filename)[1]
+        if not file_ext:
+            file_ext = ".jpg" # Fallback neu file khong co duoi
+            
         safe_filename = f"ticket_{ticket_code}_{uuid.uuid4().hex[:8]}{file_ext}"
         file_path = f"temp_images/{safe_filename}"
         
+        # [FIX QUAN TRỌNG]: Đọc file bằng await file.read() để tránh lỗi con trỏ file (EOF)
+        content = await file.read()
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            buffer.write(content)
 
         profile_image_url = vision_service.upload_image_to_minio(file_path, prefix="profiles")
 
