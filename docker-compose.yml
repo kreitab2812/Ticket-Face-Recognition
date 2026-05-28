@@ -9,10 +9,8 @@ services:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME}
-    ports:
-      - "5432:5432"
     volumes:
-      - ./pg_data:/var/lib/postgresql/data
+      - ./pg_data:/var/lib/postgresql/data:z
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s
@@ -23,10 +21,22 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     container_name: qdrant_db
-    ports:
-      - "6333:6333"
     volumes:
-      - ./qdrant_data:/qdrant/storage
+      - ./qdrant_data:/qdrant/storage:z
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq_broker
+    environment:
+      - RABBITMQ_DEFAULT_USER=${MQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${MQ_PASSWORD}
+    command: bash -c "rabbitmq-plugins enable rabbitmq_prometheus; rabbitmq-server"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   minio:
@@ -36,29 +46,11 @@ services:
       - MINIO_ROOT_USER=${MINIO_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_PASSWORD}
     ports:
-      - "9000:9000"
+      - "9005:9000"
       - "9001:9001"
     command: server /data --console-address ":9001"
     volumes:
-      - ./minio_data:/data
-    restart: unless-stopped
-
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: rabbitmq_broker
-    environment:
-      - RABBITMQ_DEFAULT_USER=${MQ_USER}
-      - RABBITMQ_DEFAULT_PASS=${MQ_PASSWORD}
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-      - "15692:15692" # Cong nay dung de xuat metric cho Prometheus
-    command: bash -c "rabbitmq-plugins enable rabbitmq_prometheus; rabbitmq-server"
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - ./minio_data:/data:z
     restart: unless-stopped
 
   # ==========================================
@@ -82,8 +74,8 @@ services:
       minio:
         condition: service_started
     volumes:
-      - ./backend/temp_images:/code/temp_images
-      - deepface_models:/root/.deepface # Su dung Named Volume thay cho duong dan tuyet doi
+      - ./backend/temp_images:/code/temp_images:z
+      - deepface_models:/root/.deepface:z
     restart: unless-stopped
 
   ai_worker:
@@ -91,23 +83,20 @@ services:
     container_name: ai_worker
     env_file: 
       - .env
-    command: python -m task_embedding
+    command: python -u worker.py 
     depends_on:
       rabbitmq:
         condition: service_healthy
       qdrant:
         condition: service_started
     volumes:
-      - ./backend/temp_images:/code/temp_images
-      - deepface_models:/root/.deepface # Dong bo cung Volume voi backend
+      - ./backend/temp_images:/code/temp_images:z
+      - deepface_models:/root/.deepface:z
     deploy:
       resources:
         limits:
-          cpus: '2.0'         # Gioi han toi da 2 CPU cores
-          memory: 4G          # Gioi han RAM khong vuot qua 4GB tranh crash server
-        reservations:
-          cpus: '1.0'
-          memory: 2G
+          cpus: '2.0'
+          memory: 4G
     restart: unless-stopped
     
   cleanup_worker:
@@ -115,7 +104,7 @@ services:
     container_name: cleanup_worker
     command: python -m worker.tasks.cleanup_task
     volumes:
-      - ./backend/temp_images:/code/temp_images
+      - ./backend/temp_images:/code/temp_images:z
     restart: unless-stopped
 
   # ==========================================
@@ -138,10 +127,10 @@ services:
     image: nginx:alpine
     container_name: nginx_proxy
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro,z
     ports:
-      - "4000:80"       # Cong Kiosk lach luat quyen root
-      - "5000:8080"     # Cong Admin
+      - "4000:80"       
+      - "5000:8080"     
     depends_on:
       - backend_api
       - frontend_kiosk
@@ -155,8 +144,8 @@ services:
     image: prom/prometheus:latest
     container_name: prometheus
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./prometheus_data:/prometheus
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro,z
+      - ./prometheus_data:/prometheus:z
     ports:
       - "9090:9090"
     restart: unless-stopped
@@ -173,22 +162,5 @@ services:
       - prometheus
     restart: unless-stopped
 
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.47.0
-    container_name: cadvisor
-    privileged: true
-    devices:
-      - /dev/kmsg:/dev/kmsg
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-      - /dev/disk/:/dev/disk:ro
-    ports:
-      - "8080:8080"
-    restart: unless-stopped
-
-# Khai bao cac Named Volumes duoc quan ly boi Docker
 volumes:
   deepface_models:

@@ -1,5 +1,6 @@
 import os
 import logging
+import numpy as np
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,8 +24,16 @@ os.makedirs("temp_images", exist_ok=True)
 async def lifespan(app: FastAPI):
     logger.info("[*] Dang warm-up model AI ArcFace & RetinaFace. Vui long doi...")
     try:
-        DeepFace.build_model("ArcFace")
-        DeepFace.build_model("RetinaFace")
+        # Tao 1 buc anh gia mau den (224x224 pixels)
+        dummy_img = np.zeros((224, 224, 3), dtype=np.uint8)
+        
+        # Ep AI thu nhan dien buc anh gia nay de no bat buoc phai tai ca 2 model vao RAM
+        DeepFace.represent(
+            img_path=dummy_img, 
+            model_name="ArcFace", 
+            detector_backend="retinaface", 
+            enforce_detection=False
+        )
         logger.info("[+] Warm-up model thanh cong!")
     except Exception as e:
         logger.error(f"[-] Loi nghiem trong khi warm-up model: {e}")

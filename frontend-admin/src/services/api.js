@@ -11,9 +11,10 @@ const apiClient = axios.create({
 });
 
 // ==========================================
-// KHOI ADMIN API
+// KHOI ADMIN API - QUẢN LÝ DỮ LIỆU
 // ==========================================
 
+// Lấy danh sách khách mời
 export const getAttendees = async () => {
     try {
         const response = await apiClient.get('/admin/attendees');
@@ -24,6 +25,7 @@ export const getAttendees = async () => {
     }
 };
 
+// Lấy lịch sử log an ninh/check-in
 export const getCheckInLogs = async () => {
     try {
         const response = await apiClient.get('/admin/logs');
@@ -34,7 +36,35 @@ export const getCheckInLogs = async () => {
     }
 };
 
-// Sau nay cau co API Thong ke Dashboard thi chi viec viet them vao day:
-// export const getDashboardStats = async () => { ... }
+// ==========================================
+// KHOI ADMIN API - THAO TÁC HÀNH ĐỘNG
+// ==========================================
+
+// API: Thêm khách mời mới (Hỗ trợ upload File ảnh)
+export const addAttendee = async (formData) => {
+    try {
+        // Ghi đè header Content-Type thành multipart/form-data cho riêng API này để gửi được File
+        const response = await apiClient.post('/admin/add_attendee', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        });
+        return response;
+    } catch (error) {
+        console.error("[-] Loi call API addAttendee:", error);
+        throw error;
+    }
+};
+
+// API: Xóa khách mời (Quyền sinh sát của Admin)
+export const deleteAttendeeApi = async (id) => {
+    try {
+        const response = await apiClient.delete(`/admin/attendee/${id}`);
+        return response.data;
+    } catch (error) {
+        console.error(`[-] Loi call API deleteAttendeeApi (${id}):`, error);
+        throw error;
+    }
+};
 
 export default apiClient;

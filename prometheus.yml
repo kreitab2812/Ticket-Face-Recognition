@@ -13,7 +13,7 @@ scrape_configs:
     static_configs:
       - targets: ['rabbitmq_broker:15692']
 
-  # 3. Theo doi Tai nguyen Container (RAM, CPU cua AI Worker)
-  - job_name: 'docker_containers'
-    static_configs:
-      - targets: ['cadvisor:8080']
+# 3. Theo doi Tai nguyen Container (RAM, CPU cua AI Worker)
+  #- job_name: 'docker_containers'
+  #  static_configs:
+  #    - targets: ['cadvisor:8080']
