@@ -69,8 +69,11 @@ async def websocket_scan(websocket: WebSocket, db: Session = Depends(get_db)):
                 continue
 
             try:
-                # Giai ma anh tu Base64 chuyen tu Frontend
-                encoded_data = data.split(',')[1]
+                # [FIX]: Tang cuong su an toan khi boc tach Base64 tu JS gui len
+                if ',' in data:
+                    encoded_data = data.split(',', 1)[1]
+                else:
+                    encoded_data = data
                 img_bytes = base64.b64decode(encoded_data)
             except Exception as e:
                 print(f"[-] LOI LOGIC: Giai ma Base64 bi hong - {e}", flush=True)

@@ -10,7 +10,6 @@ jobs:
   test-backend:
     runs-on: ubuntu-latest
     
-    # Đưa toàn bộ các dependencies (DB, MQ, Storage) vào block services
     services:
       postgres:
         image: postgres:15
@@ -25,33 +24,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
-      rabbitmq:
-        image: rabbitmq:3
-        env:
-          RABBITMQ_DEFAULT_USER: admin
-          RABBITMQ_DEFAULT_PASS: adminpassword
-        ports:
-          - "5672:5672"
-        options: >-
-          --health-cmd "rabbitmq-diagnostics -q ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      minio:
-        image: minio/minio
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-        ports:
-          - "9000:9000"
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        command: server /data
 
     steps:
       - uses: actions/checkout@v4
@@ -71,16 +43,13 @@ jobs:
           pip install -r requirements.txt
           pip install "numpy<2" "opencv-python<4.11" "tensorflow==2.16.1" "tf-keras==2.16.0" "httpx<0.28.0" pytest
           
-      - name: Setup MinIO Buckets and Local Hosts
+      - name: Start RabbitMQ and MinIO
         run: |
-          # Sử dụng MinIO Client (mc) để tạo các bucket tự động thay vì dùng docker exec
-          wget -q https://dl.min.io/client/mc/release/linux-amd64/mc
-          chmod +x mc
-          ./mc alias set myminio http://localhost:9000 minioadmin minioadmin
-          ./mc mb myminio/event-logs
-          ./mc mb myminio/avatars
-          
-          # Map host cho local runner để pass các test
+          docker run -d --network host --name rabbitmq rabbitmq:3
+          docker run -d --network host --name minio -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin minio/minio server /data
+          sleep 5
+          docker exec minio mkdir -p /data/event-logs
+          docker exec minio mkdir -p /data/avatars
           echo "127.0.0.1 minio rabbitmq" | sudo tee -a /etc/hosts
           
       - name: Run Pytest
@@ -89,8 +58,8 @@ jobs:
           TF_USE_LEGACY_KERAS: "1"
           MINIO_ACCESS_KEY: "minioadmin"
           MINIO_SECRET_KEY: "minioadmin"
-          RABBITMQ_USER: "admin"
-          RABBITMQ_PASSWORD: "adminpassword"
+          RABBITMQ_USER: "guest"
+          RABBITMQ_PASSWORD: "guest"
         run: |
           cd backend
           python -m pytest tests/
@@ -139,24 +108,18 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/btl-backend:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/btl-backend:latest
+          tags: ghcr.io/${{ github.repository_owner }}/btl-backend:latest
           
       - name: Build and push Admin
         uses: docker/build-push-action@v5
         with:
           context: ./frontend-admin
           push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/btl-admin:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/btl-admin:latest
+          tags: ghcr.io/${{ github.repository_owner }}/btl-admin:latest
           
       - name: Build and push Kiosk
         uses: docker/build-push-action@v5
         with:
           context: ./frontend-kiosk
           push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/btl-kiosk:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/btl-kiosk:latest
+          tags: ghcr.io/${{ github.repository_owner }}/btl-kiosk:latest

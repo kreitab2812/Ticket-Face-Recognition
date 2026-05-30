@@ -62,7 +62,7 @@ services:
     env_file: 
       - .env
     ports:
-      - "8000:8000"
+      - "8000:8000"  # [FIX]: Cổng này giúp cậu vào được /docs để test
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     depends_on:
       postgres:
@@ -100,9 +100,9 @@ services:
     restart: unless-stopped
     
   cleanup_worker:
-    build: ./backend
+    build: ./worker  # [FIX]: Đổi từ ./backend sang ./worker cho chuẩn cấu trúc mới
     container_name: cleanup_worker
-    command: python -m worker.tasks.cleanup_task
+    command: python -m tasks.cleanup_task
     volumes:
       - ./backend/temp_images:/code/temp_images:z
     restart: unless-stopped

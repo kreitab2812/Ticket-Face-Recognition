@@ -2,68 +2,47 @@ import axios from 'axios';
 
 // Tao ra mot instance cua axios de dung chung cho toan bo du an
 const apiClient = axios.create({
-    // Nho Nginx da proxy /api/ qua cho backend, nen ta chi can dung base URL nay
     baseURL: '/api', 
     headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json', // Cái này tốt cho GET/DELETE, nhưng độc hại cho Upload File
     },
-    timeout: 10000, // Timeout neu server backend khong tra loi sau 10 giay
+    timeout: 10000,
 });
 
-// ==========================================
-// KHOI ADMIN API - QUẢN LÝ DỮ LIỆU
-// ==========================================
-
-// Lấy danh sách khách mời
 export const getAttendees = async () => {
     try {
         const response = await apiClient.get('/admin/attendees');
         return response.data;
     } catch (error) {
-        console.error("[-] Loi call API getAttendees:", error);
         throw error;
     }
 };
 
-// Lấy lịch sử log an ninh/check-in
 export const getCheckInLogs = async () => {
     try {
         const response = await apiClient.get('/admin/logs');
         return response.data;
     } catch (error) {
-        console.error("[-] Loi call API getCheckInLogs:", error);
         throw error;
     }
 };
 
-// ==========================================
-// KHOI ADMIN API - THAO TÁC HÀNH ĐỘNG
-// ==========================================
-
-// API: Thêm khách mời mới (Hỗ trợ upload File ảnh)
+// [FIX DỨT ĐIỂM LỖI 422 & LỖI TEXT/PLAIN]
 export const addAttendee = async (formData) => {
     try {
-        const response = await apiClient.post('/admin/add_attendee', formData, {
-            headers: {
-                // CHÚ Ý: Phải set undefined để trình duyệt tự động điền 'multipart/form-data' 
-                // kèm theo chuỗi phân tách (boundary). Nếu viết cứng sẽ làm hỏng file ảnh!
-                'Content-Type': undefined
-            }
-        });
-        return response;
+        // Dùng thẳng axios gốc (không dùng apiClient) để browser tự do set Multipart Form-Data
+        const response = await axios.post('/api/admin/add_attendee', formData);
+        return response; 
     } catch (error) {
-        console.error("[-] Loi call API addAttendee:", error);
         throw error;
     }
 };
 
-// API: Xóa khách mời (Quyền sinh sát của Admin)
 export const deleteAttendeeApi = async (id) => {
     try {
         const response = await apiClient.delete(`/admin/attendee/${id}`);
         return response.data;
     } catch (error) {
-        console.error(`[-] Loi call API deleteAttendeeApi (${id}):`, error);
         throw error;
     }
 };

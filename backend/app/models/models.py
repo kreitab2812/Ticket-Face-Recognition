@@ -10,12 +10,11 @@ class Attendee(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     name = Column(String, nullable=False, index=True)
     ticket_code = Column(String, unique=True, nullable=False, index=True)
+    image_url = Column(String, nullable=True) # [FIX]: Thêm cột lưu link ảnh
     is_checked_in = Column(Boolean, default=False) 
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(timezone.utc))
 
-    # Moi quan he voi bang log checkin, tu dong xoa neu attendee bi xoa
     logs = relationship("CheckInLog", back_populates="attendee", cascade="all, delete-orphan")
-
 
 class CheckInLog(Base):
     __tablename__ = "checkin_logs"
@@ -26,5 +25,4 @@ class CheckInLog(Base):
     status = Column(String, nullable=False) 
     image_url = Column(String, nullable=True) 
 
-    # Moi quan he nguoc lai voi bang attendee
     attendee = relationship("Attendee", back_populates="logs")

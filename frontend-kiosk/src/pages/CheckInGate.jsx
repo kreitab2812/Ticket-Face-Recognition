@@ -14,9 +14,9 @@ const CheckInGate = () => {
     setStatus('connecting');
     setMessage('Dang thiet lap duong truyen...');
 
-    // Tu dong lay IP host cua mang hien tai, khong fix cung localhost
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api/ws/scan`;
+    // [FIX]: Bỏ qua Nginx, trỏ thẳng vào cổng 8000 của Backend FastAPI
+    // Dùng window.location.hostname để hệ thống chạy mượt trên cả localhost lẫn IP mạng LAN
+    const wsUrl = `ws://${window.location.hostname}:8000/ws/scan`;
     
     wsRef.current = new WebSocket(wsUrl);
 
