@@ -1,12 +1,14 @@
 from fastapi import APIRouter, UploadFile, File, Form, Depends
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
 import pika
 import json
 import traceback
 import uuid
 import os
 from typing import List
+from deepface import DeepFace
+from qdrant_client import QdrantClient
 
 from app.models.database import get_db
 from app.models import models, schemas 
@@ -14,8 +16,32 @@ from app.core.config import settings
 from app.services import vision_service, ticket_service
 
 router = APIRouter()
-
 TEMP_DIR = "/code/temp_images"
+
+# [BỘ LỌC AI TRƯỚC CỔNG]: Kiểm tra trùng lặp khuôn mặt ngay lập tức
+def check_duplicate_face(img_path: str):
+    try:
+        embedding_objs = DeepFace.represent(
+            img_path=img_path, 
+            model_name="ArcFace", 
+            detector_backend="retinaface",
+            enforce_detection=True
+        )
+        embedding = embedding_objs[0]["embedding"]
+        
+        qdrant_local = QdrantClient(host="qdrant_db", port=6333)
+        search_result = qdrant_local.search(
+            collection_name="attendees",
+            query_vector=embedding,
+            limit=1
+        )
+        # Nếu giống hơn 85%, trả về mã vé của người đã đăng ký trước đó
+        if search_result and search_result[0].score > 0.85:
+            return search_result[0].payload.get("ticket_code")
+        return None
+    except Exception as e:
+        print(f"[-] Loi check trung mat truoc cong: {e}", flush=True)
+        return "NO_FACE"
 
 @router.post("/add_attendee")
 async def add_attendee(
@@ -24,10 +50,11 @@ async def add_attendee(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
+    temp_path = None
     try:
         exist_ticket = ticket_service.get_attendee_by_ticket(db, ticket_code)
         if exist_ticket:
-            return {"status": "error", "message": "Ma ve nay da ton tai trong he thong!"}
+            return {"status": "error", "message": f"Mã vé {ticket_code} đã tồn tại trong hệ thống!"}
 
         if not os.path.exists(TEMP_DIR):
             os.makedirs(TEMP_DIR, exist_ok=True)
@@ -37,14 +64,27 @@ async def add_attendee(
             file_ext = ".jpg" 
             
         safe_filename = f"ticket_{ticket_code}_{uuid.uuid4().hex[:8]}{file_ext}"
-        file_path = os.path.join(TEMP_DIR, safe_filename)
+        temp_path = os.path.join(TEMP_DIR, safe_filename)
         
         content = await file.read()
-        with open(file_path, "wb") as buffer:
+        with open(temp_path, "wb") as buffer:
             buffer.write(content)
 
-        profile_image_url = vision_service.upload_image_to_minio(file_path, prefix="profiles")
+        # 1. KIỂM DUYỆT TỨC THÌ BẰNG AI
+        duplicate_ticket = await run_in_threadpool(check_duplicate_face, temp_path)
         
+        if duplicate_ticket == "NO_FACE":
+            if os.path.exists(temp_path): os.remove(temp_path)
+            return {"status": "error", "message": "AI không tìm thấy khuôn mặt rõ nét. Vui lòng chụp lại!"}
+        elif duplicate_ticket:
+            if os.path.exists(temp_path): os.remove(temp_path)
+            return {
+                "status": "error", 
+                "message": f"LỖI AN NINH: Khuôn mặt này đã bị trùng với khách hàng có mã vé [{duplicate_ticket}]!"
+            }
+
+        # 2. AN TOÀN -> BẮT ĐẦU LƯU DỮ LIỆU
+        profile_image_url = vision_service.upload_image_to_minio(temp_path, prefix="profiles")
         if not profile_image_url:
             raise Exception("Loi mang: MinIO khong the luu anh. Vui long check lai!")
 
@@ -65,7 +105,7 @@ async def add_attendee(
         channel = connection.channel()
         channel.queue_declare(queue='ticket_processing')
 
-        message = {"name": name, "ticket_code": ticket_code, "image_path": file_path}
+        message = {"name": name, "ticket_code": ticket_code, "image_path": temp_path}
         channel.basic_publish(exchange='', routing_key='ticket_processing', body=json.dumps(message))
         connection.close()
 
@@ -75,47 +115,15 @@ async def add_attendee(
         return {
             "status": "success", 
             "id": new_attendee.id, 
-            "message": "Da luu thong tin, day anh len MinIO va day tac vu vao RabbitMQ."
+            "message": "Đã lưu thông tin và truyền dữ liệu cho hệ thống Kiosk."
         }
     except Exception as e:
         db.rollback()
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
         print(f"\n[!!!] LỖI THÊM KHÁCH: {str(e)}\n", flush=True)
         traceback.print_exc()
         return {"status": "error", "message": str(e)}
-
-# ==========================================
-# [WEBHOOK]: TRẠM XỬ LÝ TRÙNG LẶP TỪ WORKER
-# ==========================================
-class DuplicateWebhookPayload(BaseModel):
-    new_ticket_code: str
-    original_ticket_code: str
-
-@router.post("/webhook_duplicate")
-def handle_duplicate_face(payload: DuplicateWebhookPayload, db: Session = Depends(get_db)):
-    try:
-        # 1. Hủy bỏ vé mới (Vì cố tình dùng khuôn mặt của người khác để đăng ký)
-        new_attendee = db.query(models.Attendee).filter(models.Attendee.ticket_code == payload.new_ticket_code).first()
-        if new_attendee:
-            # Xóa cả lịch sử log (nếu có) và vé rác này
-            db.query(models.CheckInLog).filter(models.CheckInLog.attendee_id == new_attendee.id).delete()
-            db.delete(new_attendee)
-            
-        # 2. Báo động đỏ vào thẻ của khách hàng thật sự
-        original_attendee = db.query(models.Attendee).filter(models.Attendee.ticket_code == payload.original_ticket_code).first()
-        if original_attendee:
-            ticket_service.log_checkin_event(
-                db=db, 
-                attendee_id=original_attendee.id, 
-                status=f"🚨 Cảnh báo hệ thống: Kẻ gian đang cố gắng sử dụng mã vé [{payload.new_ticket_code}] để đăng ký sao chép khuôn mặt này!", 
-                image_url=None
-            )
-            
-        db.commit()
-        return {"status": "success"}
-    except Exception as e:
-        db.rollback()
-        print(f"[-] Loi xu ly Webhook trung lap: {e}", flush=True)
-        return {"status": "error"}
 
 @router.get("/logs", response_model=List[schemas.CheckInLogResponse])
 def get_checkin_logs(db: Session = Depends(get_db)):
@@ -132,7 +140,6 @@ def delete_attendee(id: int, db: Session = Depends(get_db)):
     attendee = db.query(models.Attendee).filter(models.Attendee.id == id).first()
     if not attendee:
         return {"status": "error", "message": "Khong tim thay khach moi nay"}
-    
     try:
         db.query(models.CheckInLog).filter(models.CheckInLog.attendee_id == id).delete()
         db.delete(attendee)

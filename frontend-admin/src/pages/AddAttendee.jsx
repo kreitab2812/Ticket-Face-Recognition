@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import * as faceapi from 'face-api.js';
-import { UserPlus, Camera, Upload, CheckCircle, XCircle, Loader2, Image as ImageIcon, Save } from 'lucide-react';
+import { UserPlus, Camera, Upload, CheckCircle, XCircle, Loader2, Image as ImageIcon, Save, AlertOctagon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { addAttendee } from '../services/api'; 
 
@@ -25,6 +25,7 @@ const AddAttendee = () => {
     const [isModelLoaded, setIsModelLoaded] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isValidFace, setIsValidFace] = useState(null); 
+    const [submitError, setSubmitError] = useState(''); // [STATE MỚI] Ghi nhận lỗi an ninh
 
     useEffect(() => {
         const loadModels = async () => {
@@ -41,6 +42,7 @@ const AddAttendee = () => {
     const validateImageWithAI = async (imageSrc) => {
         setIsProcessing(true);
         setIsValidFace(null);
+        setSubmitError(''); // Xóa lỗi cũ khi check ảnh mới
 
         try {
             const img = new Image();
@@ -92,6 +94,7 @@ const AddAttendee = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setSubmitError(''); // Làm sạch lỗi cũ
         
         if (!name || !ticketCode) return toast.error('Vui lòng nhập Tên và Mã vé!');
         if (!selectedFile || isValidFace !== true) return toast.error('Vui lòng cung cấp hình ảnh chân dung hợp lệ!');
@@ -106,18 +109,19 @@ const AddAttendee = () => {
         try {
             const response = await addAttendee(formData);
             
-            // [FIX BỆNH 1]: Kiểm tra data.status từ Backend trả về
             if(response.data && response.data.status === 'success') {
                 toast.success(`Đã thêm khách mời ${name} thành công!`);
-                // Clear form sau khi thành công
+                // Clear form
                 setName('');
                 setTicketCode('');
                 setPreviewImage(null);
                 setSelectedFile(null);
                 setIsValidFace(null);
+                setSubmitError('');
             } else {
-                // Báo lỗi ngay lập tức nếu Backend kêu la (Ví dụ: Trùng vé, Lỗi DB)
-                toast.error(response.data?.message || 'Lỗi dữ liệu: Backend từ chối lưu!');
+                // [TÍNH NĂNG MỚI]: Hiện bảng đỏ chót khi bị trùng mặt, KHÔNG xóa dữ liệu Form
+                setSubmitError(response.data?.message || 'Lỗi dữ liệu: Backend từ chối lưu!');
+                toast.error('Thêm thất bại, vui lòng kiểm tra lại vấn đề an ninh!');
             }
         } catch (error) {
             toast.error('Lỗi mạng hoặc Backend đang sập!');
@@ -164,17 +168,25 @@ const AddAttendee = () => {
                             </div>
                         </div>
 
+                        {/* HIỂN THỊ CẢNH BÁO TRÙNG MẶT Ở ĐÂY */}
+                        {submitError && (
+                            <div className="mt-6 p-4 bg-red-100 border-2 border-red-500 rounded-xl flex items-start gap-3 text-red-700 animate-in slide-in-from-top-2">
+                                <AlertOctagon className="w-6 h-6 flex-shrink-0 mt-0.5" />
+                                <span className="font-bold text-sm leading-relaxed">{submitError}</span>
+                            </div>
+                        )}
+
                         <button 
                             onClick={handleSubmit} 
                             disabled={!name || !ticketCode || isValidFace !== true || isProcessing}
-                            className={`w-full mt-8 flex items-center justify-center gap-2 py-4 rounded-xl font-bold text-white transition-all shadow-lg ${
+                            className={`w-full mt-6 flex items-center justify-center gap-2 py-4 rounded-xl font-bold text-white transition-all shadow-lg ${
                                 (!name || !ticketCode || isValidFace !== true || isProcessing) 
                                 ? 'bg-slate-300 cursor-not-allowed shadow-none' 
                                 : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/30'
                             }`}
                         >
                             {isProcessing ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                            {isProcessing ? 'Đang xử lý...' : 'Lưu Hồ Sơ Khách Mời'}
+                            {isProcessing ? 'Đang xác thực...' : 'Lưu Hồ Sơ Khách Mời'}
                         </button>
                     </div>
                 </div>

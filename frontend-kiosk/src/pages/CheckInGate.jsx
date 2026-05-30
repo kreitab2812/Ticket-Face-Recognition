@@ -18,7 +18,7 @@ const CheckInGate = () => {
   const [message, setMessage] = useState('Đang kết nối tới hệ thống an ninh...');
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   
-  // [TÁCH UI]: Toast đỏ góc màn hình dành riêng cho mất mạng
+  // TOAST BÁO LỖI HỆ THỐNG
   const [sysError, setSysError] = useState('');
 
   useEffect(() => {
@@ -48,7 +48,6 @@ const CheckInGate = () => {
 
   const connectWebSocket = useCallback(() => {
     setSysError('');
-
     const wsUrl = `ws://${window.location.hostname}:8000/ws/scan`;
     wsRef.current = new WebSocket(wsUrl);
 
@@ -115,6 +114,7 @@ const CheckInGate = () => {
         }
         const avgBrightness = sum / (imgData.length / 4 * 3);
 
+        // BẮT LỖI CHE CAMERA
         if (avgBrightness < 15) { 
            if (status !== 'covered') {
                setStatus('covered');
@@ -122,7 +122,6 @@ const CheckInGate = () => {
                isFacePresentRef.current = false;
                clearTimeout(facePresentTimerRef.current);
                
-               // [BẮN LOG TANG CHỨNG]
                const imageSrc = webcamRef.current?.getScreenshot();
                if (imageSrc) {
                    fetch(`http://${window.location.hostname}:8000/log_security`, {
@@ -140,10 +139,11 @@ const CheckInGate = () => {
 
         const faces = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 160, scoreThreshold: 0.5 }));
 
+        // LUỒNG 4 BƯỚC CHUẨN MỰC
         if (faces.length > 0) {
           if (!isFacePresentRef.current) {
             isFacePresentRef.current = true;
-            setStatus('detecting');
+            setStatus('detecting'); // Bước 2: Đã thấy mặt
             setMessage('Đã phát hiện khuôn mặt, giữ nguyên 1.5 giây...');
             
             facePresentTimerRef.current = setTimeout(() => {
@@ -151,7 +151,7 @@ const CheckInGate = () => {
                 const imageSrc = webcamRef.current?.getScreenshot();
                 if (imageSrc) {
                   isProcessingRef.current = true;
-                  setStatus('processing');
+                  setStatus('processing'); // Bước 3: Đối chiếu
                   setMessage('Đang trích xuất và đối chiếu dữ liệu...');
                   wsRef.current.send(imageSrc);
                 } else {
@@ -167,7 +167,7 @@ const CheckInGate = () => {
             isFacePresentRef.current = false;
             clearTimeout(facePresentTimerRef.current);
             if (status === 'detecting' || status === 'idle') {
-              setStatus('idle');
+              setStatus('idle'); // Bước 1: Trở về chờ quét
               setMessage('Đang chờ quét khuôn mặt...');
             }
           }
@@ -175,7 +175,6 @@ const CheckInGate = () => {
       }
     };
 
-    // [TĂNG TỐC UI]: Đẩy lên 200ms để bắt phản xạ cực nhanh
     const interval = setInterval(detectFaceLoop, 200);
     return () => clearInterval(interval);
   }, [isModelLoaded, status]);
@@ -206,9 +205,9 @@ const CheckInGate = () => {
     Icon = CameraOff;
     iconColor = 'text-yellow-500';
   } else if (status === 'detecting' || status === 'processing') {
-    borderColor = 'border-yellow-400';
+    borderColor = 'border-cyan-400';
     Icon = Loader2;
-    iconColor = 'text-yellow-400 animate-spin';
+    iconColor = 'text-cyan-400 animate-spin';
   } else if (!isModelLoaded) {
     borderColor = 'border-orange-500';
     Icon = Loader2;
@@ -218,7 +217,7 @@ const CheckInGate = () => {
   return (
     <div className={`min-h-screen flex flex-col items-center justify-center transition-colors duration-500 ${bgColor}`}>
       
-      {/* BANNER THÔNG BÁO LỖI HỆ THỐNG */}
+      {/* TOAST LỖI HỆ THỐNG */}
       {sysError && (
         <div className="fixed top-6 right-6 bg-red-600/90 backdrop-blur text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-bounce border border-red-400 z-50 font-bold tracking-wide">
           <WifiOff className="w-6 h-6" /> {sysError}
@@ -239,12 +238,22 @@ const CheckInGate = () => {
           className="w-[800px] h-[600px] object-cover mirrored"
           style={{ transform: 'scaleX(-1)' }} 
         />
-        <div className="absolute inset-0 pointer-events-none border-[100px] border-black/40">
+        
+        {/* HIỆU ỨNG LASER SCAN QUÉT MẶT */}
+        {status === 'processing' && (
+           <div className="absolute inset-0 z-30 pointer-events-none overflow-hidden">
+               {/* Thanh tia laser */}
+               <div className="absolute w-full h-1 bg-cyan-400 shadow-[0_0_20px_5px_rgba(34,211,238,0.8)] animate-scanner"></div>
+               {/* Lớp nền nhấp nháy */}
+               <div className="absolute inset-0 bg-cyan-500/10 animate-pulse"></div>
+           </div>
+        )}
+
+        <div className="absolute inset-0 pointer-events-none border-[100px] border-black/40 z-20">
            <div className={`w-full h-full border-2 border-dashed ${iconColor} opacity-50`}></div>
         </div>
       </div>
 
-      {/* THANH TRẠNG THÁI TRUNG TÂM */}
       <div className="mt-8 bg-slate-800/80 backdrop-blur px-8 py-4 rounded-full flex items-center gap-4 border border-slate-700 shadow-xl transition-all duration-300">
         <Icon className={`w-8 h-8 ${iconColor}`} />
         <span className={`text-xl font-bold ${status === 'denied' ? 'text-red-400 uppercase' : 'text-white'}`}>{message}</span>
