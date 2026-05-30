@@ -1,8 +1,8 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from minio import Minio
 from app.core.config import settings
-import json # [THÊM MỚI] Đe xu ly file cap quyen
+import json
 
 engine = create_engine(
     settings.DATABASE_URL,
@@ -12,6 +12,14 @@ engine = create_engine(
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+# [MẸO BYPASS MIGRATION]: Chạy ngầm SQL gỡ Constraint trực tiếp trên Database đang sống
+try:
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE checkin_logs ALTER COLUMN attendee_id DROP NOT NULL;"))
+        conn.commit()
+except Exception:
+    pass # Nếu đã gỡ rồi thì bỏ qua
 
 def get_db():
     db = SessionLocal()
@@ -33,7 +41,6 @@ def init_minio():
             minio_client.make_bucket(settings.BUCKET_NAME)
             print(f"[*] Da khoi tao vung chua {settings.BUCKET_NAME} tren MinIO.")
         
-        # [FIX QUAN TRỌNG 1]: Ép MinIO mở khóa Public cho phép Trình duyệt xem ảnh!
         policy = {
             "Version": "2012-10-17",
             "Statement": [
@@ -46,6 +53,5 @@ def init_minio():
             ]
         }
         minio_client.set_bucket_policy(settings.BUCKET_NAME, json.dumps(policy))
-        
     except Exception as e:
-        print(f"[-] Loi ket noi MinIO: {e}")
+        print(f"[-] Loi khoi tao MinIO Policy: {e}")

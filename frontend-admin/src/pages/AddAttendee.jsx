@@ -3,9 +3,8 @@ import Webcam from 'react-webcam';
 import * as faceapi from 'face-api.js';
 import { UserPlus, Camera, Upload, CheckCircle, XCircle, Loader2, Image as ImageIcon, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { addAttendee } from '../services/api'; // Dùng đường ống API trung tâm
+import { addAttendee } from '../services/api'; 
 
-// Hàm phụ trợ: Chuyển đổi ảnh chụp Base64 từ Webcam thành dạng File chuẩn để gửi form
 const dataURLtoFile = (dataurl, filename) => {
     let arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1],
         bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
@@ -18,16 +17,15 @@ const AddAttendee = () => {
     
     const [name, setName] = useState('');
     const [ticketCode, setTicketCode] = useState('');
-    const [inputMode, setInputMode] = useState('camera'); // 'camera' hoac 'upload'
+    const [inputMode, setInputMode] = useState('camera'); 
     
     const [previewImage, setPreviewImage] = useState(null);
     const [selectedFile, setSelectedFile] = useState(null);
     
     const [isModelLoaded, setIsModelLoaded] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [isValidFace, setIsValidFace] = useState(null); // true: Hợp lệ, false: Từ chối
+    const [isValidFace, setIsValidFace] = useState(null); 
 
-    // Load Model AI siêu nhẹ từ CDN
     useEffect(() => {
         const loadModels = async () => {
             try {
@@ -40,7 +38,6 @@ const AddAttendee = () => {
         loadModels();
     }, []);
 
-    // HÀM: AI KIỂM DUYỆT ẢNH TRƯỚC KHI LƯU
     const validateImageWithAI = async (imageSrc) => {
         setIsProcessing(true);
         setIsValidFace(null);
@@ -72,7 +69,6 @@ const AddAttendee = () => {
         }
     };
 
-    // HÀM: CHỤP TỪ WEBCAM
     const capturePhoto = () => {
         if (!webcamRef.current) return;
         const imageSrc = webcamRef.current.getScreenshot();
@@ -84,7 +80,6 @@ const AddAttendee = () => {
         }
     };
 
-    // HÀM: TẢI FILE TỪ MÁY
     const handleFileUpload = (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -95,7 +90,6 @@ const AddAttendee = () => {
         }
     };
 
-    // HÀM: ĐẨY DỮ LIỆU LÊN MÁY CHỦ QUA API.JS
     const handleSubmit = async (e) => {
         e.preventDefault();
         
@@ -110,10 +104,10 @@ const AddAttendee = () => {
         formData.append('file', selectedFile);
 
         try {
-            // Gọi hàm addAttendee từ file api.js
             const response = await addAttendee(formData);
             
-            if(response.status === 200) {
+            // [FIX BỆNH 1]: Kiểm tra data.status từ Backend trả về
+            if(response.data && response.data.status === 'success') {
                 toast.success(`Đã thêm khách mời ${name} thành công!`);
                 // Clear form sau khi thành công
                 setName('');
@@ -121,9 +115,12 @@ const AddAttendee = () => {
                 setPreviewImage(null);
                 setSelectedFile(null);
                 setIsValidFace(null);
+            } else {
+                // Báo lỗi ngay lập tức nếu Backend kêu la (Ví dụ: Trùng vé, Lỗi DB)
+                toast.error(response.data?.message || 'Lỗi dữ liệu: Backend từ chối lưu!');
             }
         } catch (error) {
-            toast.error('Lỗi khi lưu vào máy chủ. Vui lòng kiểm tra lại backend!');
+            toast.error('Lỗi mạng hoặc Backend đang sập!');
             console.error(error);
         } finally {
             setIsProcessing(false);
@@ -143,7 +140,6 @@ const AddAttendee = () => {
             </div>
 
             <div className="flex flex-col lg:flex-row gap-8">
-                {/* ---------------- CỘT TRÁI: FORM TEXT ---------------- */}
                 <div className="w-full lg:w-1/3 space-y-6">
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                         <h3 className="text-lg font-bold text-slate-800 mb-4 border-b border-slate-100 pb-2">Thông Tin Định Danh</h3>
@@ -183,7 +179,6 @@ const AddAttendee = () => {
                     </div>
                 </div>
 
-                {/* ---------------- CỘT PHẢI: CAMERA VÀ AI ---------------- */}
                 <div className="w-full lg:w-2/3">
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-full flex flex-col">
                         

@@ -10,7 +10,7 @@ class Attendee(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     name = Column(String, nullable=False, index=True)
     ticket_code = Column(String, unique=True, nullable=False, index=True)
-    image_url = Column(String, nullable=True) # [FIX]: Thêm cột lưu link ảnh
+    image_url = Column(String, nullable=True) 
     is_checked_in = Column(Boolean, default=False) 
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(timezone.utc))
 
@@ -20,7 +20,8 @@ class CheckInLog(Base):
     __tablename__ = "checkin_logs"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    attendee_id = Column(Integer, ForeignKey("attendees.id", ondelete="CASCADE"), nullable=False)
+    # [FIX AN NINH]: Mở khóa Nullable=True để lưu được tang chứng ẩn danh (bị che cam, người lạ)
+    attendee_id = Column(Integer, ForeignKey("attendees.id", ondelete="CASCADE"), nullable=True)
     check_time = Column(DateTime, default=lambda: datetime.datetime.now(timezone.utc))
     status = Column(String, nullable=False) 
     image_url = Column(String, nullable=True) 

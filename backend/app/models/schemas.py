@@ -2,31 +2,24 @@ from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional, List
 
-# ==========================================
-# 1. SCHEMAS CHO LOG CHECK-IN
-# ==========================================
-
 class CheckInLogBase(BaseModel):
     status: str
     image_url: Optional[str] = None
 
 class CheckInLogCreate(CheckInLogBase):
-    attendee_id: int
+    # [FIX AN NINH]: Báo cho Pydantic biết ID có thể trống
+    attendee_id: Optional[int] = None
 
 class CheckInLogResponse(CheckInLogBase):
     id: int
-    attendee_id: int
+    attendee_id: Optional[int] = None
     check_time: datetime
     model_config = ConfigDict(from_attributes=True)
-
-# ==========================================
-# 2. SCHEMAS CHO NGUOI THAM GIA (ATTENDEE)
-# ==========================================
 
 class AttendeeBase(BaseModel):
     name: str
     ticket_code: str
-    image_url: Optional[str] = None # [FIX]: Khai báo để API trả link ảnh về cho UI
+    image_url: Optional[str] = None 
 
 class AttendeeCreate(AttendeeBase):
     pass
